@@ -1,0 +1,7 @@
+{
+  "name": "pnpm-app",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "echo build"
+  }
+}

@@ -37,6 +37,10 @@
     "untrustedWorkspaces": {
       "supported": "limited",
       "description": "In Restricted Mode, Task Hub lists commands but does not run them, because running project scripts executes code from the repository."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "Task Hub runs commands as local processes, so it needs the files on disk."
     }
   },
   "activationEvents": [
@@ -70,7 +74,7 @@
       {
         "view": "taskHub.commands",
         "contents": "No runnable commands found in this workspace yet.\n[Refresh](command:taskHub.refresh)",
-        "when": "workbenchState != empty"
+        "when": "workbenchState != empty && taskHub.scanned"
       }
     ],
     "commands": [
@@ -105,6 +109,18 @@
         "icon": "$(output)"
       },
       {
+        "command": "taskHub.goToDefinition",
+        "title": "Go to Definition",
+        "category": "Task Hub",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "taskHub.copyCommand",
+        "title": "Copy Command",
+        "category": "Task Hub",
+        "icon": "$(copy)"
+      },
+      {
         "command": "taskHub.addCommand",
         "title": "Add Command",
         "category": "Task Hub",
@@ -120,6 +136,12 @@
         "command": "taskHub.quickRun",
         "title": "Run Command…",
         "category": "Task Hub"
+      },
+      {
+        "command": "taskHub.openSettings",
+        "title": "Settings",
+        "category": "Task Hub",
+        "icon": "$(settings-gear)"
       }
     ],
     "menus": {
@@ -143,40 +165,93 @@
         {
           "command": "taskHub.showOutput",
           "when": "false"
+        },
+        {
+          "command": "taskHub.goToDefinition",
+          "when": "false"
+        },
+        {
+          "command": "taskHub.copyCommand",
+          "when": "false"
         }
       ],
       "view/title": [
         {
           "command": "taskHub.refresh",
           "when": "view == taskHub.commands",
-          "group": "navigation"
+          "group": "navigation@1"
         },
         {
           "command": "taskHub.addCommand",
           "when": "view == taskHub.commands",
-          "group": "navigation"
+          "group": "navigation@2"
+        },
+        {
+          "command": "taskHub.openSettings",
+          "when": "view == taskHub.commands",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
         {
-          "command": "taskHub.run",
-          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.(idle|passed|failed|stopped)/",
-          "group": "inline"
-        },
-        {
           "command": "taskHub.openUrl",
           "when": "view == taskHub.commands && viewItem == cmd.running.url",
-          "group": "inline"
+          "group": "inline@1"
+        },
+        {
+          "command": "taskHub.run",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.(idle|passed|failed|stopped)$/",
+          "group": "inline@2"
+        },
+        {
+          "command": "taskHub.showOutput",
+          "when": "view == taskHub.commands && viewItem == cmd.failed",
+          "group": "inline@3"
         },
         {
           "command": "taskHub.stop",
           "when": "view == taskHub.commands && viewItem =~ /^cmd\\.running/",
-          "group": "inline"
+          "group": "inline@4"
         },
         {
           "command": "taskHub.restart",
           "when": "view == taskHub.commands && viewItem =~ /^cmd\\.running/",
-          "group": "inline"
+          "group": "inline@5"
+        },
+        {
+          "command": "taskHub.run",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.(idle|passed|failed|stopped)$/",
+          "group": "1_run@1"
+        },
+        {
+          "command": "taskHub.stop",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.running/",
+          "group": "1_run@2"
+        },
+        {
+          "command": "taskHub.restart",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.running/",
+          "group": "1_run@3"
+        },
+        {
+          "command": "taskHub.openUrl",
+          "when": "view == taskHub.commands && viewItem == cmd.running.url",
+          "group": "1_run@4"
+        },
+        {
+          "command": "taskHub.showOutput",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.(running|passed|failed|stopped)/",
+          "group": "1_run@5"
+        },
+        {
+          "command": "taskHub.goToDefinition",
+          "when": "view == taskHub.commands && viewItem =~ /^(cmd\\.|group$)/",
+          "group": "2_navigate@1"
+        },
+        {
+          "command": "taskHub.copyCommand",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\./",
+          "group": "3_copy@1"
         }
       ]
     },
@@ -227,9 +302,10 @@
             "**/.venv/**",
             "**/dist/**",
             "**/target/**",
-            "**/build/**"
+            "**/build/**",
+            "**/.vscode-test/**"
           ],
-          "description": "Glob patterns of folders that are never scanned."
+          "markdownDescription": "Glob patterns of folders that are never scanned. Folders hidden by `files.exclude` are skipped too."
         },
         "taskHub.longRunningNames": {
           "type": "array",

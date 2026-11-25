@@ -1,61 +1,44 @@
 import * as vscode from 'vscode';
+import { DETECTORS } from './detectors';
+import { CommandRegistry } from './registry';
+import { Runner } from './runner/runner';
+import { RunStateStore } from './state';
+import { registerCommands } from './ui/commands';
+import { CommandsTreeProvider } from './ui/treeProvider';
 
-/**
- * Commands declared in package.json that don't have a real handler yet. Each one gets
- * its handler as its milestone lands (see docs/DESIGN.md, "Milestones"); until then it
- * shows a short notice, so clicking it never fails with "command not found".
- */
-const PLANNED_COMMANDS = [
-	'taskHub.run',
-	'taskHub.stop',
-	'taskHub.restart',
-	'taskHub.openUrl',
-	'taskHub.showOutput',
-	'taskHub.addCommand',
-	'taskHub.quickRun',
-] as const;
-
-/** The Commands view. Empty until the detectors land, so the view shows its welcome text. */
-class CommandsTreeProvider implements vscode.TreeDataProvider<vscode.TreeItem> {
-	private readonly changed = new vscode.EventEmitter<void>();
-	readonly onDidChangeTreeData = this.changed.event;
-
-	refresh(): void {
-		this.changed.fire();
-	}
-
-	getTreeItem(item: vscode.TreeItem): vscode.TreeItem {
-		return item;
-	}
-
-	getChildren(): vscode.TreeItem[] {
-		return [];
-	}
-
-	dispose(): void {
-		this.changed.dispose();
-	}
+/** Returned from activate() for the extension's own tests; not a stable API for other extensions. */
+export interface TestApi {
+	registry: CommandRegistry;
+	runner: Runner;
+	states: RunStateStore;
+	tree: CommandsTreeProvider;
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+export function activate(context: vscode.ExtensionContext): TestApi {
 	const log = vscode.window.createOutputChannel('Task Hub', { log: true });
-	context.subscriptions.push(log);
 	log.info(`Task Hub ${context.extension.packageJSON.version} activated`);
 
-	const tree = new CommandsTreeProvider();
+	const states = new RunStateStore();
+	const runner = new Runner(states, log);
+	const registry = new CommandRegistry(DETECTORS, log);
+	const tree = new CommandsTreeProvider(registry, states);
+
 	context.subscriptions.push(
+		log,
+		states,
+		runner,
+		registry,
 		tree,
-		vscode.window.registerTreeDataProvider('taskHub.commands', tree),
-		vscode.commands.registerCommand('taskHub.refresh', () => tree.refresh()),
+		vscode.window.createTreeView('taskHub.commands', { treeDataProvider: tree, showCollapseAll: true }),
+		...registerCommands({ registry, runner, states, extensionId: context.extension.id }),
 	);
 
-	for (const id of PLANNED_COMMANDS) {
-		context.subscriptions.push(
-			vscode.commands.registerCommand(id, () => {
-				void vscode.window.showInformationMessage(`Task Hub: "${id}" is not implemented yet.`);
-			}),
-		);
-	}
+	// A progress bar on the view during the first scan; the "nothing found" text waits for it.
+	void vscode.window
+		.withProgress({ location: { viewId: 'taskHub.commands' } }, () => registry.ready)
+		.then(() => vscode.commands.executeCommand('setContext', 'taskHub.scanned', true));
+
+	return { registry, runner, states, tree };
 }
 
 export function deactivate(): void {}

@@ -112,16 +112,18 @@ Each row shows what its script takes, e.g. `env (staging, prod) --dry-run`. Afte
 
 ## Running commands
 
-Every command runs as a VS Code task whose terminal stays hidden. Task Hub starts the process itself, so it sees all output and the exit code, and the terminal only appears when the user clicks Output or the command fails.
+Task Hub starts every command as a child process itself, so it sees all output and the exit code. No terminal is created while a command runs; one appears only when the user clicks Output or the command fails, so runs don't fill the terminal list.
 
 **How it works**
 
-1. Task Hub builds a `vscode.Task` with a `CustomExecution`. Its pseudoterminal spawns the command with Node's `child_process.spawn` (`shell: true`, the command's folder as `cwd`).
-2. Output is copied to the pseudoterminal (so the user can read it later) and passed to the output watcher (ports, ready text).
-3. The task's `presentationOptions.reveal` is `Never`, so no terminal panel pops up.
+1. Task Hub spawns the command with Node's `child_process.spawn` (`shell: true`, the command's folder as `cwd`).
+2. Output is kept in memory (the last 1 MB per command) and passed to the output watcher (ports, ready text).
+3. **Show Output** creates a terminal backed by a pseudoterminal: it replays the output so far, then follows live. Closing that terminal only closes the view; the command keeps running.
 4. On exit, the exit code sets the status. A non-zero code shows a notification: *"lint failed (exit 1)"* with **Show output** and **Run again**.
 
-**Trade-off.** A spawned process has no real TTY. Colors are kept with `FORCE_COLOR=1`, and typed input is passed to the process's stdin, but tools that insist on a real TTY may behave differently. Each command gets a **Run in normal terminal** option as a fallback, which uses a plain `ShellExecution` (status still works; port detection does not). Tasks from `.vscode/tasks.json` always use VS Code's own runner.
+*Changed while building v0.1:* the first plan ran each command as a `vscode.Task` with a `CustomExecution` and `reveal: Never`. That still adds a terminal tab per run, and the API gives no handle to show a task's terminal later, so Task Hub creates its own terminal on demand instead.
+
+**Trade-off.** A spawned process has no real TTY. Colors are kept with `FORCE_COLOR=1`, and typed input is passed to the process's stdin a line at a time (Ctrl+C stops the command), but tools that insist on a real TTY may behave differently. Each command gets a **Run in normal terminal** option as a fallback, which uses a plain `ShellExecution` (status still works; port detection does not). Tasks from `.vscode/tasks.json` always use VS Code's own runner.
 
 **Statuses**
 
@@ -340,7 +342,7 @@ The key `package.json` entries. Each tree row sets a `contextValue` such as `cmd
 | Setting | Default | What it does |
 | --- | --- | --- |
 | `taskHub.sources` | all | Which detectors are on |
-| `taskHub.exclude` | `**/node_modules/**`, `**/.venv/**`, `**/dist/**`, `**/target/**`, `**/build/**` | Folders never scanned |
+| `taskHub.exclude` | `**/node_modules/**`, `**/.venv/**`, `**/dist/**`, `**/target/**`, `**/build/**`, `**/.vscode-test/**` | Folders never scanned, besides those hidden by `files.exclude` |
 | `taskHub.longRunningNames` | `dev`, `start`, `serve`, `watch`, `run`, `bootRun`, `spring-boot:run` | Names treated as long-running |
 | `taskHub.revealTerminal` | `onFailure` | `never`, `onFailure` or `always` |
 | `taskHub.notify` | `failures` | `failures`, `all` or `never` |

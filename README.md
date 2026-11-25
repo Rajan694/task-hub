@@ -4,7 +4,7 @@
 
 **Every command your project can run, one click away.** Task Hub is a sidebar that finds the scripts, targets and services in your workspace (npm, Makefile, docker-compose, Maven, Gradle, shell and PowerShell scripts, VS Code tasks and more) and runs them without opening or typing into a terminal.
 
-> **Status: early development.** This is the project setup; features arrive by milestone (see [Roadmap](#roadmap)). The full design is in [docs/DESIGN.md](docs/DESIGN.md).
+> **Status: early development.** npm, pnpm, yarn and bun scripts work today (milestone 0.1); the other sources arrive by milestone (see [Roadmap](#roadmap)). The full design is in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Features
 
@@ -30,12 +30,26 @@
 | Python | `manage.py` (Django), Poe and PDM tasks in `pyproject.toml` |
 | Maven, Gradle | `pom.xml`, `build.gradle(.kts)`, multi-module projects, wrappers |
 
+## Using it
+
+Open the **Task Hub** icon in the activity bar. Each `package.json` with scripts gets a heading; hover a script and click ▶ to run it.
+
+| Row shows | Meaning | Buttons |
+| --- | --- | --- |
+| ○ | Not run yet | Run |
+| ⟳ `running · :5173` | Running; a dev-server URL was found | Open in Browser, Stop, Restart |
+| ✓ `passed · 3.2s` | Exited with code 0 | Run |
+| ✗ `failed (exit 1)` | Exited with an error | Run, Show Output |
+| ■ `stopped` | Stopped by you | Run |
+
+Clicking a row only selects it; nothing runs until you click ▶. Right-click a row for **Show Output**, **Go to Definition** and **Copy Command**. Output stays out of the way: a terminal opens only when you ask for it or a command fails.
+
 ## Extension Settings
 
 | Setting | Default | What it does |
 | --- | --- | --- |
 | `taskHub.sources` | all | Which detectors are on |
-| `taskHub.exclude` | `node_modules`, `.venv`, `dist`, `target`, `build` | Folders never scanned |
+| `taskHub.exclude` | `node_modules`, `.venv`, `dist`, `target`, `build`, `.vscode-test` | Folders never scanned (folders hidden by `files.exclude` are skipped too) |
 | `taskHub.longRunningNames` | `dev`, `start`, `serve`, `watch`, `run`, `bootRun`, `spring-boot:run` | Names treated as long-running |
 | `taskHub.revealTerminal` | `onFailure` | `never`, `onFailure` or `always` |
 | `taskHub.notify` | `failures` | `failures`, `all` or `never` |

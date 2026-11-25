@@ -1,0 +1,10 @@
+{
+  "name": "fixture-root",
+  "private": true,
+  "scripts": {
+    "pass": "node -e \"console.log('all good')\"",
+    "fail": "node -e \"console.error('broken'); process.exit(3)\"",
+    "serve": "node serve.js",
+    "ask": "node ask.js"
+  }
+}

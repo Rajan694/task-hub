@@ -9,3 +9,6 @@ releases/
 .env
 .env.*
 !.env.example
+
+# The test workspace has a node_modules folder on purpose (it must not be scanned).
+!src/test/fixtures/workspace/node_modules/
