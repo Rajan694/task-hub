@@ -2,6 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { failureReason, formatAgo, formatDuration, statusText } from '../format';
 import type { CommandGroup, HubCommand, RunState, SourceKind } from '../model';
+import type { Favorites } from '../favorites';
 import type { CommandRegistry } from '../registry';
 import type { ServiceMonitor } from '../services';
 import type { RunStateStore } from '../state';
@@ -9,8 +10,9 @@ import type { RunStateStore } from '../state';
 export interface GroupNode {
 	readonly kind: 'group';
 	readonly group: CommandGroup;
-	readonly source: SourceKind;
-	readonly folder: vscode.WorkspaceFolder;
+	readonly source: SourceKind | 'favorites';
+	/** Undefined for Favorites, which spans folders. */
+	readonly folder: vscode.WorkspaceFolder | undefined;
 	readonly children: CommandNode[];
 }
 
@@ -18,11 +20,14 @@ export interface CommandNode {
 	readonly kind: 'command';
 	readonly command: HubCommand;
 	readonly parent: GroupNode;
+	/** A copy of the row under Favorites. */
+	readonly favorite?: boolean;
 }
 
 export type TreeNode = GroupNode | CommandNode;
 
-const GROUP_ICONS: Record<SourceKind, string> = {
+const GROUP_ICONS: Record<SourceKind | 'favorites', string> = {
+	favorites: 'star-full',
 	npm: 'package',
 	make: 'tools',
 	just: 'checklist',
@@ -39,7 +44,10 @@ const GROUP_ICONS: Record<SourceKind, string> = {
 /** The Commands view: one heading per package.json, Makefile, compose file, script folder…; one row per command. */
 export class CommandsTreeProvider implements vscode.TreeDataProvider<TreeNode>, vscode.Disposable {
 	private roots: GroupNode[] = [];
+	/** Each command's row in its own group. */
 	private byKey = new Map<string, CommandNode>();
+	/** Every row of each command: its own, and its copy under Favorites. */
+	private rowsByKey = new Map<string, CommandNode[]>();
 	private readonly changed = new vscode.EventEmitter<TreeNode | undefined>();
 	readonly onDidChangeTreeData = this.changed.event;
 	private readonly disposables: vscode.Disposable[];
@@ -48,6 +56,7 @@ export class CommandsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
 		private readonly registry: CommandRegistry,
 		private readonly states: RunStateStore,
 		private readonly services: ServiceMonitor,
+		private readonly favorites: Favorites,
 	) {
 		this.rebuild();
 		this.disposables = [
@@ -56,16 +65,21 @@ export class CommandsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
 				this.rebuild();
 				this.changed.fire(undefined);
 			}),
+			favorites.onDidChange(() => {
+				this.rebuild();
+				this.changed.fire(undefined);
+			}),
 			states.onDidChange((key) => {
-				const node = this.byKey.get(key);
-				if (node) {
+				for (const node of this.rowsByKey.get(key) ?? []) {
 					this.changed.fire(node);
 				}
 			}),
 			services.onDidChange(() => {
-				for (const node of this.byKey.values()) {
-					if (node.command.service) {
-						this.changed.fire(node);
+				for (const nodes of this.rowsByKey.values()) {
+					for (const node of nodes) {
+						if (node.command.service) {
+							this.changed.fire(node);
+						}
 					}
 				}
 			}),
@@ -91,7 +105,7 @@ export class CommandsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
 	getTreeItem(node: TreeNode): vscode.TreeItem {
 		if (node.kind === 'group') {
 			const item = new vscode.TreeItem(node.group.label, vscode.TreeItemCollapsibleState.Expanded);
-			item.id = `group:${node.folder.uri.toString()}#${node.group.id}`;
+			item.id = node.folder ? `group:${node.folder.uri.toString()}#${node.group.id}` : `group:${node.group.id}`;
 			item.description = node.group.description;
 			item.tooltip = node.group.tooltip;
 			item.iconPath = new vscode.ThemeIcon(GROUP_ICONS[node.source]);
@@ -99,10 +113,12 @@ export class CommandsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
 			return item;
 		}
 		const { command } = node;
-		const row = rowState(command, this.states.get(command.key), this.services.isRunning(command.key));
+		const state = this.states.get(command.key);
+		const row = rowState(command, state, this.services.isRunning(command.key), this.favorites.isFavorite(command));
 		const item = new vscode.TreeItem(command.label, vscode.TreeItemCollapsibleState.None);
-		item.id = command.key;
-		item.description = row.text;
+		item.id = node.favorite ? `favorite:${command.key}` : command.key;
+		// Under Favorites the row also says where the command comes from: "apps/web — running · :5173".
+		item.description = node.favorite ? [command.group.label, row.contextValue.startsWith('cmd.idle') ? '' : row.text].filter(Boolean).join(' — ') : row.text;
 		item.iconPath = row.icon;
 		item.contextValue = row.contextValue;
 		// The tooltip is built on hover (resolveTreeItem), so "12s ago" is current.
@@ -130,8 +146,27 @@ export class CommandsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
 			group.children.push(node);
 			byKey.set(command.key, node);
 		}
-		this.roots = [...groups.values()];
+		const rowsByKey = new Map([...byKey].map(([key, node]) => [key, [node]]));
+		const favoriteCommands = this.favorites.commands();
+		const roots = [...groups.values()];
+		if (favoriteCommands.length) {
+			const favorites: GroupNode = {
+				kind: 'group',
+				group: { id: 'favorites', label: 'Favorites', tooltip: 'Right-click a command → Add to Favorites. Saved in .vscode/task-hub.json.' },
+				source: 'favorites',
+				folder: undefined,
+				children: [],
+			};
+			for (const command of favoriteCommands) {
+				const node: CommandNode = { kind: 'command', command, parent: favorites, favorite: true };
+				favorites.children.push(node);
+				rowsByKey.get(command.key)?.push(node);
+			}
+			roots.unshift(favorites);
+		}
+		this.roots = roots;
 		this.byKey = byKey;
+		this.rowsByKey = rowsByKey;
 	}
 
 	dispose(): void {
@@ -149,8 +184,8 @@ interface RowState {
  * What a row shows. A compose service that docker reports as running shows "running" even
  * when Task Hub didn't start it; one that isn't running shows as idle unless its last start failed.
  */
-export function rowState(command: HubCommand, state: RunState, serviceUp = false): RowState {
-	const flags = rowFlags(command);
+export function rowState(command: HubCommand, state: RunState, serviceUp = false, favorite = false): RowState {
+	const flags = rowFlags(command, favorite);
 	if (command.service && state.status !== 'running' && state.status !== 'ready' && state.status !== 'failed') {
 		return serviceUp
 			? { text: 'running', icon: new vscode.ThemeIcon('vm-running', new vscode.ThemeColor('testing.iconPassed')), contextValue: `cmd.up${flags}` }
@@ -170,7 +205,7 @@ export function rowState(command: HubCommand, state: RunState, serviceUp = false
  * The row's context value, which decides its buttons (see `menus` in package.json):
  * `cmd.idle`, `cmd.passed`, `cmd.failed`, `cmd.stopped`, `cmd.running`, `cmd.running.url`
  * once a dev-server URL was found, and `cmd.up` for a running compose service.
- * Flags follow: `+args` (Run with Arguments…), `+savable`, `+saved`, `+service`.
+ * Flags follow: `+args` (Run with Arguments…), `+savable`, `+saved`, `+service`, and `+fav` for favorites.
  */
 export function contextValue(state: RunState): string {
 	switch (state.status) {
@@ -183,7 +218,7 @@ export function contextValue(state: RunState): string {
 	}
 }
 
-function rowFlags(command: HubCommand): string {
+function rowFlags(command: HubCommand, favorite: boolean): string {
 	const flags: string[] = [];
 	if (command.acceptsArgs) {
 		flags.push('args');
@@ -195,6 +230,9 @@ function rowFlags(command: HubCommand): string {
 	}
 	if (command.service) {
 		flags.push('service');
+	}
+	if (favorite) {
+		flags.push('fav');
 	}
 	return flags.map((f) => `+${f}`).join('');
 }

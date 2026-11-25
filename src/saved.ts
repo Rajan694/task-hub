@@ -22,11 +22,12 @@ export interface SavedList {
 }
 
 const PRIVATE_KEY = 'taskHub.savedCommands';
+const FAVORITES_KEY = 'taskHub.favorites';
 const FORMAT = { formattingOptions: { insertSpaces: true, tabSize: 2, eol: '\n' } };
 
 /**
- * Saved commands, per workspace folder: in `.vscode/task-hub.json` so a team can commit and
- * share them (the default), or in VS Code's workspace state with `taskHub.storage: private`.
+ * Saved commands and favorites, per workspace folder: in `.vscode/task-hub.json` so a team can
+ * commit and share them (the default), or in VS Code's workspace state with `taskHub.storage: private`.
  * Edits to the file keep its comments and formatting.
  */
 export class SavedStore implements vscode.Disposable {
@@ -115,6 +116,34 @@ export class SavedStore implements vscode.Disposable {
 				return;
 			}
 			await fs.promises.writeFile(file.fsPath, applyEdits(text, modify(text, ['commands', index], undefined, FORMAT)));
+		}
+		this.changed.fire();
+	}
+
+	/** The ids of the folder's favorite commands, in their order ("npm:apps/web:dev"). */
+	async favorites(folder: vscode.WorkspaceFolder): Promise<string[]> {
+		if (this.isPrivate(folder)) {
+			return this.state.get<string[]>(`${FAVORITES_KEY}:${folder.uri.toString()}`, []);
+		}
+		const text = await readFile(SavedStore.fileOf(folder));
+		const json = text === undefined ? undefined : (parse(text, [], { allowTrailingComma: true }) as { favorites?: unknown });
+		return Array.isArray(json?.favorites) ? json.favorites.filter((id: unknown): id is string => typeof id === 'string') : [];
+	}
+
+	/** Adds a command to the end of the favorites, or removes it. */
+	async setFavorite(folder: vscode.WorkspaceFolder, id: string, favorite: boolean): Promise<void> {
+		const current = await this.favorites(folder);
+		if (current.includes(id) === favorite) {
+			return;
+		}
+		const next = favorite ? [...current, id] : current.filter((f) => f !== id);
+		if (this.isPrivate(folder)) {
+			await this.state.update(`${FAVORITES_KEY}:${folder.uri.toString()}`, next);
+		} else {
+			const file = SavedStore.fileOf(folder);
+			const text = (await readFile(file)) ?? '{}\n';
+			await fs.promises.mkdir(vscode.Uri.joinPath(folder.uri, '.vscode').fsPath, { recursive: true });
+			await fs.promises.writeFile(file.fsPath, applyEdits(text, modify(text, ['favorites'], next, FORMAT)));
 		}
 		this.changed.fire();
 	}

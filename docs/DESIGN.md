@@ -65,6 +65,8 @@ v Groups
 | Title bar | + | Saves a new custom command for this project |
 | Status bar | ▶ 2 running | Opens a quick list of all commands to run or stop (no keyboard shortcut for now) |
 
+*Settled while building v0.3:* rows under **Favorites** show the heading they come from, then their status (`apps/web — running · :5173`). The status bar item is a bare play icon while nothing runs, so it stays small. **Task Hub: Run Command…** lists each command once, in the first section it belongs to: Running, Favorites, Recent (the last five run), then the sidebar's headings. Enter on a running command offers Stop, Restart, Show Output and Open in Browser instead of starting it twice.
+
 **Row icons** use built-in VS Code icons and theme colors so they match every theme: a spinning `sync` icon while running, `pass` in the test-passed color, `error` in the test-failed color, and `circle-outline` when idle.
 
 ## Command sources

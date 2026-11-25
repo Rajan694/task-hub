@@ -139,6 +139,18 @@
         "icon": "$(trash)"
       },
       {
+        "command": "taskHub.addFavorite",
+        "title": "Add to Favorites",
+        "category": "Task Hub",
+        "icon": "$(star-empty)"
+      },
+      {
+        "command": "taskHub.removeFavorite",
+        "title": "Remove from Favorites",
+        "category": "Task Hub",
+        "icon": "$(star-full)"
+      },
+      {
         "command": "taskHub.serviceLogs",
         "title": "Logs",
         "category": "Task Hub",
@@ -166,6 +178,12 @@
         "command": "taskHub.quickRun",
         "title": "Run Command…",
         "category": "Task Hub"
+      },
+      {
+        "command": "taskHub.stopAll",
+        "title": "Stop All Commands",
+        "category": "Task Hub",
+        "icon": "$(debug-stop)"
       },
       {
         "command": "taskHub.openSettings",
@@ -222,6 +240,14 @@
         },
         {
           "command": "taskHub.serviceStop",
+          "when": "false"
+        },
+        {
+          "command": "taskHub.addFavorite",
+          "when": "false"
+        },
+        {
+          "command": "taskHub.removeFavorite",
           "when": "false"
         }
       ],
@@ -336,7 +362,17 @@
         {
           "command": "taskHub.deleteSavedCommand",
           "when": "view == taskHub.commands && viewItem =~ /\\+saved/",
-          "group": "5_saved@1"
+          "group": "6_saved@1"
+        },
+        {
+          "command": "taskHub.addFavorite",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.(?!.*\\+fav)/",
+          "group": "5_favorites@1"
+        },
+        {
+          "command": "taskHub.removeFavorite",
+          "when": "view == taskHub.commands && viewItem =~ /\\+fav/",
+          "group": "5_favorites@1"
         }
       ]
     },

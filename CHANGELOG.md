@@ -27,6 +27,11 @@ Write new entries under **[Unreleased]**. The publish script moves them under th
 - When PowerShell's execution policy blocks a script, Task Hub offers to run it once with `-ExecutionPolicy Bypass`.
 - **My commands**: saved commands in `.vscode/task-hub.json` (shared with the team), or on this machine only with `taskHub.storage: private`. The **+** button adds one; right-click **Save as Command…** saves any command with its last arguments; **Delete Saved Command** removes one. Edits keep the file's comments.
 - Right-click **Run with Arguments…** adds words after the command line (`-- --watch`). **Restart**, **Run Again** and **Copy Command** reuse the last arguments.
+- **Favorites**: right-click **Add to Favorites** pins a command under a **Favorites** heading at the top of the view, which shows where each one comes from (`apps/web — running · :5173`). Saved as `favorites` in `.vscode/task-hub.json` (or privately with `taskHub.storage: private`).
+- **Status bar item**: *⟳ 2 running* while commands run (a play icon otherwise); its tooltip lists them, and a click opens the quick-pick runner.
+- **Task Hub: Run Command…**: every command in one searchable list, with Running, Favorites and Recent sections first. Enter runs a command, or offers Stop, Restart, Show Output and Open in Browser for a running one; row buttons stop, restart, show output or run with arguments without leaving the list. **Stop All** appears when more than one command runs.
+- **Task Hub: Stop All Commands** in the Command Palette.
+- **Run history survives a reload**: each command's last status, exit code, duration, finish time and arguments are kept in the workspace state (the last 500 commands). A command still running when the window closed comes back as stopped, and Restart reuses its arguments.
 
 ## [0.1.0] - 2026-11-25
 

@@ -124,4 +124,6 @@ export interface RunState {
 	error?: string;
 	/** The first local dev-server URL found in the output. */
 	url?: string;
+	/** The arguments of the run, reused by Restart, Run Again and Copy Command. */
+	args?: readonly string[];
 }

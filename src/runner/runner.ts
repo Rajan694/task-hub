@@ -53,7 +53,6 @@ export interface FinishedRun {
 export class Runner implements vscode.Disposable {
 	private readonly active = new Map<string, ActiveRun>();
 	private readonly outputs = new Map<string, CommandOutput>();
-	private readonly lastArgsByKey = new Map<string, readonly string[]>();
 	private readonly finished = new vscode.EventEmitter<FinishedRun>();
 	/** Fires when a run ends: passed, failed or stopped. */
 	readonly onDidFinish = this.finished.event;
@@ -67,9 +66,9 @@ export class Runner implements vscode.Disposable {
 		return this.active.has(key);
 	}
 
-	/** The arguments of the command's last run, reused by Restart and Run Again. */
+	/** The arguments of the command's last run (kept across reloads), reused by Restart and Run Again. */
 	lastArgs(key: string): readonly string[] | undefined {
-		return this.lastArgsByKey.get(key);
+		return this.states.get(key).args;
 	}
 
 	/**
@@ -82,9 +81,8 @@ export class Runner implements vscode.Disposable {
 			return current.done;
 		}
 		const args = options.args ?? [];
-		this.lastArgsByKey.set(command.key, args);
 		const startedAt = Date.now();
-		this.states.set(command.key, { status: 'running', startedAt });
+		this.states.set(command.key, { status: 'running', startedAt, args: args.length ? args : undefined });
 
 		let resolveDone!: (state: RunState) => void;
 		const done = new Promise<RunState>((resolve) => (resolveDone = resolve));
@@ -97,7 +95,7 @@ export class Runner implements vscode.Disposable {
 			if (this.active.get(command.key) === run) {
 				this.active.delete(command.key);
 			}
-			const state = this.toState(run, outcome, startedAt);
+			const state: RunState = { ...this.toState(run, outcome, startedAt), args: args.length ? args : undefined };
 			const took = formatDuration((state.endedAt ?? startedAt) - startedAt);
 			output?.append(`\r\n${summaryLine(state, took)}\r\n`);
 			this.log.info(`${command.id} ${state.status}${state.status === 'failed' ? ` (${failureReason(state)})` : ''} after ${took}`);

@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { ArgMemory, askExtraArgs, askForArgs } from '../args/prompt';
 import { readSettings } from '../config';
 import { isLongRunning } from '../detectors/common';
+import type { Favorites } from '../favorites';
 import { failureReason, formatDuration } from '../format';
 import type { HubCommand } from '../model';
 import type { CommandRegistry } from '../registry';
@@ -12,6 +13,7 @@ import { SavedStore } from '../saved';
 import type { ServiceMonitor } from '../services';
 import { quoteArg } from '../shell';
 import type { RunStateStore } from '../state';
+import { showQuickRun } from './quickPick';
 import type { TreeNode } from './treeProvider';
 
 interface Deps {
@@ -20,14 +22,10 @@ interface Deps {
 	states: RunStateStore;
 	services: ServiceMonitor;
 	saved: SavedStore;
+	favorites: Favorites;
 	memory: ArgMemory;
 	extensionId: string;
 }
-
-/** Commands that are declared in package.json but arrive with a later milestone (docs/DESIGN.md, "Milestones"). */
-const PLANNED: Record<string, string> = {
-	'taskHub.quickRun': 'The quick-pick runner arrives in version 0.3.',
-};
 
 const UNAVAILABLE_HELP: Record<string, string> = {
 	'needs bash': 'Install Git for Windows (it includes Git Bash) or WSL, then reload the window.',
@@ -36,7 +34,7 @@ const UNAVAILABLE_HELP: Record<string, string> = {
 
 type How = 'run' | 'withArgs' | 'again' | 'restart';
 
-export function registerCommands({ registry, runner, states, services, saved, memory, extensionId }: Deps): vscode.Disposable[] {
+export function registerCommands({ registry, runner, states, services, saved, favorites, memory, extensionId }: Deps): vscode.Disposable[] {
 	/** Commands run code from the workspace, so Restricted Mode blocks them. */
 	const trusted = (): boolean => {
 		if (vscode.workspace.isTrusted) {
@@ -83,23 +81,40 @@ export function registerCommands({ registry, runner, states, services, saved, me
 	const onCommand = (id: string, handler: (command: HubCommand, node: TreeNode) => unknown) =>
 		vscode.commands.registerCommand(id, (node?: TreeNode) => (node?.kind === 'command' ? handler(node.command, node) : undefined));
 
+	const openUrl = async (command: HubCommand) => {
+		const url = states.get(command.key).url;
+		if (!url) {
+			return;
+		}
+		if (readSettings(command.folder.uri).openUrlIn === 'simpleBrowser') {
+			await vscode.commands.executeCommand('simpleBrowser.show', url);
+		} else {
+			await vscode.env.openExternal(vscode.Uri.parse(url));
+		}
+	};
+
 	return [
 		onCommand('taskHub.run', (command) => start(command)),
 		onCommand('taskHub.runWithArgs', (command) => start(command, 'withArgs')),
 		onCommand('taskHub.stop', (command) => runner.stop(command.key)),
 		onCommand('taskHub.restart', (command) => start(command, 'restart')),
 		onCommand('taskHub.showOutput', (command) => runner.showOutput(command)),
-		onCommand('taskHub.openUrl', async (command) => {
-			const url = states.get(command.key).url;
-			if (!url) {
-				return;
-			}
-			if (readSettings(command.folder.uri).openUrlIn === 'simpleBrowser') {
-				await vscode.commands.executeCommand('simpleBrowser.show', url);
-			} else {
-				await vscode.env.openExternal(vscode.Uri.parse(url));
-			}
+		onCommand('taskHub.openUrl', openUrl),
+		onCommand('taskHub.addFavorite', (command) => favorites.set(command, true)),
+		onCommand('taskHub.removeFavorite', (command) => favorites.set(command, false)),
+		vscode.commands.registerCommand('taskHub.quickRun', async () => {
+			await registry.ready;
+			showQuickRun(
+				{ registry, runner, states, favorites },
+				{
+					run: (command, how) => start(command, how),
+					stop: (command) => runner.stop(command.key),
+					showOutput: (command) => runner.showOutput(command),
+					openUrl,
+				},
+			);
 		}),
+		vscode.commands.registerCommand('taskHub.stopAll', () => Promise.all(runner.runningCommands().map((c) => runner.stop(c.key)))),
 		onCommand('taskHub.copyCommand', async (command) => {
 			const args = runner.lastArgs(command.key) ?? [];
 			const line = [command.commandLine, ...args.map((a) => quoteArg(a))].join(' ');
@@ -143,9 +158,6 @@ export function registerCommands({ registry, runner, states, services, saved, me
 		}),
 		vscode.commands.registerCommand('taskHub.openSettings', () =>
 			vscode.commands.executeCommand('workbench.action.openSettings', `@ext:${extensionId}`),
-		),
-		...Object.entries(PLANNED).map(([id, message]) =>
-			vscode.commands.registerCommand(id, () => vscode.window.showInformationMessage(`Task Hub: ${message}`)),
 		),
 
 		runner.onDidFinish(({ command, state }) => {
