@@ -24,7 +24,11 @@ export class ServiceMonitor implements vscode.Disposable {
 		private readonly registry: CommandRegistry,
 		private readonly log: vscode.LogOutputChannel,
 	) {
-		this.disposables = [this.changed, registry.onDidChange(() => void this.refresh())];
+		this.disposables = [
+			this.changed,
+			registry.onDidChange(() => void this.refresh()),
+			vscode.workspace.onDidGrantWorkspaceTrust(() => void this.refresh()),
+		];
 	}
 
 	isRunning(key: string): boolean {
@@ -42,6 +46,10 @@ export class ServiceMonitor implements vscode.Disposable {
 	}
 
 	refresh(): Promise<void> {
+		// Nothing can start in Restricted Mode, and docker reads the workspace's compose files: wait for trust.
+		if (!vscode.workspace.isTrusted) {
+			return Promise.resolve();
+		}
 		if (this.refreshing) {
 			this.again = true;
 			return this.refreshing;

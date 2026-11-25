@@ -12,7 +12,7 @@ export function argsSummary(args: readonly ScriptArg[]): string {
 				// "-Target" for PowerShell, "-t <tag>" from a usage line, "-e <value>" from getopts.
 				text = !arg.name.startsWith(arg.flag) ? arg.flag : arg.kind === 'text' && arg.name === arg.flag ? `${arg.flag} <value>` : arg.name;
 			}
-			if (arg.choices?.length) {
+			if (arg.choices?.length && text !== arg.choices.join('|')) {
 				text += ` (${arg.choices.join(', ')})`;
 			}
 			if (arg.variadic) {

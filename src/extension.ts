@@ -43,6 +43,7 @@ export function activate(context: vscode.ExtensionContext): TestApi {
 	const tree = new CommandsTreeProvider(registry, states, services, favorites, groups);
 	const view = vscode.window.createTreeView('taskHub.commands', { treeDataProvider: tree, showCollapseAll: true });
 	services.setVisible(view.visible);
+	showRestrictedMode(view);
 
 	context.subscriptions.push(
 		log,
@@ -57,6 +58,7 @@ export function activate(context: vscode.ExtensionContext): TestApi {
 		view,
 		registerStatusBar(runner, states, registry),
 		view.onDidChangeVisibility((e) => services.setVisible(e.visible)),
+		vscode.workspace.onDidGrantWorkspaceTrust(() => showRestrictedMode(view)),
 		...registerCommands({ registry, runner, states, services, saved, favorites, groups, gradleTasks, memory, log, extensionId: context.extension.id }),
 	);
 
@@ -66,6 +68,15 @@ export function activate(context: vscode.ExtensionContext): TestApi {
 		.then(() => vscode.commands.executeCommand('setContext', 'taskHub.scanned', true));
 
 	return { registry, runner, states, services, saved, favorites, groups, gradleTasks, memory, tree };
+}
+
+/** A line at the top of the view while the workspace is in Restricted Mode, where commands are listed but don't run. */
+export function restrictedModeMessage(trusted: boolean): string | undefined {
+	return trusted ? undefined : 'Restricted Mode: commands are listed but not run until you trust this workspace.';
+}
+
+function showRestrictedMode(view: vscode.TreeView<unknown>): void {
+	view.message = restrictedModeMessage(vscode.workspace.isTrusted);
 }
 
 export function deactivate(): void {}

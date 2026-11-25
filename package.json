@@ -1,8 +1,12 @@
 {
   "name": "task-hub",
   "displayName": "Task Hub",
-  "description": "Finds every command your project can run (npm scripts, Makefile, docker-compose, Maven, Gradle, shell and PowerShell scripts, VS Code tasks) and runs it with one click, with live status, stop, restart and port links.",
+  "description": "Every command your project can run, one click away: npm, pnpm, yarn and bun scripts, Makefile, just, Taskfile, docker compose, Django, Poe, PDM, Maven, Gradle, shell and PowerShell scripts and VS Code tasks, with live status, stop, restart, dev-server links and ordered groups.",
   "icon": "assets/icon.png",
+  "galleryBanner": {
+    "color": "#14213d",
+    "theme": "dark"
+  },
   "publisher": "rajan694",
   "version": "0.1.0",
   "license": "MIT",
@@ -22,13 +26,22 @@
   ],
   "keywords": [
     "tasks",
-    "npm scripts",
     "task runner",
+    "npm scripts",
+    "pnpm",
+    "yarn",
+    "monorepo",
     "makefile",
+    "justfile",
+    "taskfile",
     "docker compose",
+    "django",
     "maven",
     "gradle",
-    "scripts"
+    "spring boot",
+    "shell scripts",
+    "powershell",
+    "dev server"
   ],
   "extensionKind": [
     "workspace"

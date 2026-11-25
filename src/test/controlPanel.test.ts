@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import type { TestApi } from '../extension';
+import { restrictedModeMessage, type TestApi } from '../extension';
 import type { HubCommand } from '../model';
 import { RunStateStore } from '../state';
 import { quickRunSections } from '../ui/quickPick';
@@ -164,5 +164,12 @@ suite('control panel', () => {
 		await api.runner.run(plain, { args: ['one', 'two'] });
 		assert.deepStrictEqual(api.states.get(plain.key).args, ['one', 'two']);
 		assert.deepStrictEqual(api.runner.lastArgs(plain.key), ['one', 'two']);
+	});
+});
+
+suite('Restricted Mode', () => {
+	test('the view says why nothing runs', () => {
+		assert.match(String(restrictedModeMessage(false)), /Restricted Mode/);
+		assert.strictEqual(restrictedModeMessage(true), undefined);
 	});
 });

@@ -220,7 +220,7 @@ suite('script arguments', () => {
 			{ name: 'env', kind: 'text', required: true, variadic: undefined },
 			{ name: '--dry-run', kind: 'switch', required: false, flag: '--dry-run' },
 			{ name: '-t <tag>', kind: 'text', required: false, flag: '-t' },
-			{ name: 'value', kind: 'choice', choices: ['start', 'stop'], required: true, variadic: undefined },
+			{ name: 'start|stop', kind: 'choice', choices: ['start', 'stop'], required: true, variadic: undefined },
 			{ name: 'files', kind: 'text', required: false, variadic: true },
 		]);
 	});
@@ -263,8 +263,9 @@ suite('script arguments', () => {
 				{ name: '--dry-run', kind: 'switch', required: false, flag: '--dry-run' },
 				{ name: 'Target', kind: 'text', required: true, flag: '-Target' },
 				{ name: 'files', kind: 'text', required: false, variadic: true },
+				{ name: 'start|stop', kind: 'choice', choices: ['start', 'stop'], required: false },
 			]),
-			'env (staging, prod) [--dry-run] -Target [files…]',
+			'env (staging, prod) [--dry-run] -Target [files…] [start|stop]',
 		);
 	});
 

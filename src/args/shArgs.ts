@@ -48,7 +48,8 @@ function fromUsage(text: string): ScriptArg[] | undefined {
 			continue;
 		}
 		const variadic = /\.\.\.[>}\]]*$/.test(token) || undefined;
-		args.push({ name: name.split('|').length > 1 ? 'value' : name, kind: 'text', required: !optional, variadic, ...choicesOf(token) });
+		// An unnamed choice ("<staging|prod>") is named by its choices.
+		args.push({ name, kind: 'text', required: !optional, variadic, ...choicesOf(token) });
 	}
 	return args.length ? args : undefined;
 }

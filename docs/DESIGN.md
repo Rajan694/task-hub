@@ -374,7 +374,7 @@ The key `package.json` entries. Each tree row sets a `contextValue` such as `cmd
 
 ## Milestones
 
-Each version works on its own and can be released.
+Each version works on its own and can be released. Status (Nov 25, 2026): v0.1 to v0.4 are built; v1.0's code, tests and README are done, and it is waiting on CI for Windows and macOS and on publishing.
 
 1. **v0.1 — npm in the sidebar.** Activity bar icon, npm/pnpm/yarn/bun scripts from every `package.json` (nested ones included), run and stop with the play button, the six statuses. Done when any script can be run and stopped without touching a terminal.
 2. **v0.2 — More sources.** Makefile, justfile, Taskfile, docker-compose services, `.vscode/tasks.json`, saved commands in `.vscode/task-hub.json`, and `.sh` / `.ps1` / `.bat` / `.cmd` scripts with argument prompts.

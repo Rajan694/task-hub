@@ -41,6 +41,11 @@ async function waitFor<T>(what: string, check: () => T | undefined | false, time
 	}
 }
 
+/** Whether output mentions a path; Windows paths compare without case (VS Code writes d:\, processes print D:\). */
+function includesPath(output: string, file: string): boolean {
+	return process.platform === 'win32' ? output.toLowerCase().includes(file.toLowerCase()) : output.includes(file);
+}
+
 function workspaceRoot(): string {
 	return vscode.workspace.workspaceFolders![0].uri.fsPath;
 }
@@ -179,7 +184,7 @@ suite('Task Hub', () => {
 			const state = await api.runner.run(command);
 			assert.strictEqual(state.status, 'passed', api.runner.outputText(command.key));
 			const printed = stripAnsi(api.runner.outputText(command.key));
-			assert.ok(printed.includes(path.join(workspaceRoot(), 'apps', 'web')), printed);
+			assert.ok(includesPath(printed, path.join(workspaceRoot(), 'apps', 'web')), printed);
 		});
 
 		test('a dev server becomes ready with its URL, and Stop ends the whole process tree', async () => {
@@ -370,7 +375,7 @@ suite('Task Hub', () => {
 			const hi = find(api, 'saved:say-hi');
 			assert.strictEqual((await api.runner.run(hi)).status, 'passed');
 			const output = stripAnsi(api.runner.outputText(hi.key));
-			assert.ok(output.includes('hi from saved') && output.includes(path.join(workspaceRoot(), 'apps', 'web')), output);
+			assert.ok(output.includes('hi from saved') && includesPath(output, path.join(workspaceRoot(), 'apps', 'web')), output);
 		});
 
 		test('free-text arguments reach a script as separate words', async () => {

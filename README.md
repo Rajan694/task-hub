@@ -1,122 +1,141 @@
 # Task Hub
 
+[![Open VSX](https://img.shields.io/open-vsx/v/rajan694/task-hub?label=Open%20VSX)](https://open-vsx.org/extension/rajan694/task-hub)
 [![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**Every command your project can run, one click away.** Task Hub is a sidebar that finds the scripts, targets and services in your workspace (npm, Makefile, docker-compose, Maven, Gradle, shell and PowerShell scripts, VS Code tasks and more) and runs them without opening or typing into a terminal.
+**Every command your project can run, one click away.** Task Hub finds the scripts, targets, tasks and services in your workspace and runs them from a sidebar, with live status, stop and restart, dev-server links and ordered groups. No terminal to open, nothing to type.
 
-> **Status: early development.** Every source below works, with groups, favorites, a status bar item and a quick-pick runner (milestones 0.1 to 0.4); version 1.0 adds Windows and macOS testing and the Marketplace listing (see [Roadmap](#roadmap)). The full design is in [docs/DESIGN.md](docs/DESIGN.md).
+![Task Hub: commands from package.json files, a Makefile, docker compose and scripts, with a dev server running, tests passed and a failed lint](docs/images/hero.png)
 
 ## Features
 
-- **Finds commands automatically**, including monorepos, nested `package.json` files and multi-root workspaces.
-- **Run, stop and restart** with one click. Stop kills the whole process tree, so dev servers really stop.
-- **Live status** per command: running, passed, failed (with exit code), how long it took.
-- **Port links.** A dev-server URL in the output becomes an **Open** button.
-- **Script arguments.** `.ps1` `param()` blocks and `.sh` usage lines, `getopts` and `case "$1"` become pick lists and text boxes before a run.
-- **Groups** start several commands in order, waiting for each to be ready.
-- **Saved commands, groups and favorites** live in `.vscode/task-hub.json`, so a team can share them.
-- **Restricted Mode aware.** In an untrusted workspace commands are listed but not run.
+- **Finds every command**: npm, pnpm, yarn and bun scripts (nested `package.json` files and monorepos too), Makefile, justfile, Taskfile, docker compose, Django, Poe, PDM, Maven, Gradle, shell, PowerShell and batch scripts, VS Code tasks, and your own saved commands. Multi-root workspaces work.
+- **One click to run, stop or restart.** Each command runs in its own folder. Stop ends the whole process tree, so dev servers really stop.
+- **Live status**: running, ready, passed, failed (with the exit code), stopped, and how long it took. It survives a window reload.
+- **Dev-server links.** A local URL in the output (`http://localhost:5173/`) shows as `:5173` with an **Open in Browser** button.
+- **Script arguments.** PowerShell `param()` blocks and shell `# Usage:` lines, `getopts` and `case "$1"` become pick lists and text boxes before a run.
+- **Groups** start several commands in order, each waiting until the previous one has finished or is ready.
+- **Favorites, a status bar item and a quick-pick runner** for the commands you use most.
+- **Out of the way**: output goes to a terminal only when you ask for it or a command fails.
+- **Team-friendly**: saved commands, groups and favorites live in `.vscode/task-hub.json`, which you can commit.
 
-## Command sources
+## Getting started
 
-| Source | Read from |
-| --- | --- |
-| npm, pnpm, yarn, bun | Every `package.json` (nested ones too); the package manager comes from the lockfile or `packageManager` |
-| Make, just, Task | `Makefile`, `justfile`, `Taskfile.yml` |
-| Docker Compose | `compose.yaml` / `docker-compose.yml` services: up, stop, logs |
-| VS Code tasks | `.vscode/tasks.json` |
-| Saved commands | `.vscode/task-hub.json` |
-| Scripts | `*.sh`, `*.bash`, `*.ps1`, `*.bat`, `*.cmd`, with their arguments |
-| Python | `manage.py` (Django), Poe and PDM tasks in `pyproject.toml` |
-| Maven, Gradle | `pom.xml`, `build.gradle(.kts)`, multi-module projects, wrappers |
+Click the **Task Hub** icon in the activity bar. Every `package.json`, Makefile, compose file, script folder… gets a heading. Hover a command and click ▶.
 
-## Using it
-
-Open the **Task Hub** icon in the activity bar. Each `package.json` with scripts gets a heading; hover a script and click ▶ to run it.
+![Running a dev server: it shows as running, then :5173 with Open in Browser, Stop and Restart buttons, then stopped](docs/images/run.gif)
 
 | Row shows | Meaning | Buttons |
 | --- | --- | --- |
 | ○ | Not run yet | Run |
 | ⟳ `running · :5173` | Running; a dev-server URL was found | Open in Browser, Stop, Restart |
 | ✓ `passed · 3.2s` | Exited with code 0 | Run |
-| ✗ `failed (exit 1)` | Exited with an error | Run, Show Output |
+| ✗ `failed (exit 1)` | Exited with an error; its terminal and a notification open | Run, Show Output |
 | ■ `stopped` | Stopped by you | Run |
 | ▣ `running` (compose) | The service is up, whoever started it | Logs, Stop Service |
 | ⚠ `needs bash` | The program the script needs isn't installed | — |
 
-Clicking a row only selects it; nothing runs until you click ▶. Right-click a row for **Run with Arguments…**, **Show Output**, **Go to Definition**, **Copy Command** and **Save as Command…**. Output stays out of the way: a terminal opens only when you ask for it or a command fails.
+Clicking a row only selects it; nothing runs until you click ▶. Right-click a command for **Run with Arguments…**, **Show Output**, **Go to Definition**, **Copy Command**, **Add to Favorites**, **Add to Group…** and **Save as Command…**. Typing into a command's terminal sends lines to it, and Ctrl+C stops it.
 
-**Favorites**: right-click a command → **Add to Favorites** to pin it under a Favorites heading at the top. **Status bar**: while commands run it shows *⟳ 2 running*; click it (or run **Task Hub: Run Command…**) for a searchable list of every command, with running, favorite and recent ones first, where you can also stop or restart them. Statuses and the last arguments of each command are kept when you reload the window.
+## Where commands come from
 
-**Scripts that take arguments** show what they take on their row (`env (staging, prod) [--dry-run]`), and ▶ asks for each value first: a pick list when the choices are known, a text box otherwise, filled with what you used last. Task Hub reads PowerShell `param()` blocks, and in shell scripts a `# Usage:` line, `getopts`, `case "$1"` and the `$1`…`$9` the script uses. Press Escape to cancel.
+| Source | Read from | Runs as |
+| --- | --- | --- |
+| npm, pnpm, yarn, bun | Every `package.json` outside `node_modules` | `pnpm run dev`, with the package manager from the nearest `packageManager` field or lockfile |
+| Make | `Makefile`, `makefile`, `GNUmakefile`; a `## comment` after a target is its description | `make build` |
+| just | `justfile`; recipe parameters are asked for | `just deploy staging` |
+| Task | `Taskfile.yml` and its variants | `task build` |
+| docker compose | `compose.yaml`, `docker-compose.yml`… | `docker compose up -d postgres`, plus Logs and Stop Service |
+| Django | `manage.py`: runserver, migrate, makemigrations, test | `.venv/bin/python manage.py migrate` (the project's venv when there is one) |
+| Poe, PDM | `[tool.poe.tasks]`, `[tool.pdm.scripts]` in `pyproject.toml` | `poe lint`, `pdm run start` |
+| Maven | Every `pom.xml`, one heading per module; `spring-boot:run` with the Spring Boot plugin | `./mvnw -pl api test`, from the project root |
+| Gradle | The root project and every `include`d subproject; `run` / `bootRun` with those plugins; **Load All Tasks** fetches the rest once | `./gradlew :api:test`, from the project root |
+| Scripts | `*.sh`, `*.bash`, `*.ps1`, and on Windows `*.bat`, `*.cmd` | `bash deploy.sh staging --dry-run`, `pwsh -NoProfile -File backup.ps1 …` |
+| VS Code tasks | `.vscode/tasks.json` | VS Code's own task system |
+| Saved commands | `.vscode/task-hub.json` | The saved command line |
 
-**Saved commands** go in `.vscode/task-hub.json`, so you can commit them for your team:
+Every command runs in the folder where it's defined. Maven and Gradle modules run from the project root with the module named, because the build tool needs the whole build.
+
+## Scripts with arguments
+
+A script's row shows what it takes (`env (staging, prod) [--dry-run]`), and ▶ asks for each value first: a pick list when the choices are known, a text box otherwise, filled with what you used last. Switches are one multi-select. Escape cancels. **Restart** and **Run Again** reuse the same arguments.
+
+![Running deploy.sh: a pick list offers staging and prod, read from the script's usage line](docs/images/args.png)
+
+Task Hub reads PowerShell `param()` blocks (`Mandatory`, defaults, `[ValidateSet()]`, `[switch]`) and, in shell scripts, a `# Usage:` comment, the `getopts` option string, `case "$1"` branches and the `$1`…`$9` the script uses (named from lines like `env=${1:-staging}`). A script with nothing to read gets one optional text box. Values are passed as an argument list, never pasted into a shell string, so spaces and quotes are safe.
+
+## Favorites, the status bar and the quick pick
+
+Right-click a command → **Add to Favorites** to pin it at the top. While commands run, the status bar shows *⟳ 2 running*. Click it, or run **Task Hub: Run Command…**, for a searchable list of everything, with running commands, groups, favorites and recent runs first. Its buttons stop, restart or show output without leaving the list. **Task Hub: Stop All Commands** stops everything.
+
+![The quick pick: Stop All, the running commands, favorites, groups and recent runs above every command](docs/images/quickpick.png)
+
+## Groups
+
+A group starts several commands in order with one click. Right-click a command → **Add to Group…**, or write the group in `.vscode/task-hub.json`:
+
+```jsonc
+{
+  "groups": [
+    {
+      "label": "Start everything",
+      "steps": [
+        { "run": "compose:root:postgres" },                                    // until `docker compose up -d` is done
+        { "run": "npm:apps/api:migrate" },                                     // until it exits with code 0
+        { "run": "npm:apps/api:start", "waitFor": "ready", "timeoutSec": 60 }, // until it prints a local URL
+        { "run": "npm:apps/web:dev", "waitFor": "ready" }
+      ]
+    }
+  ]
+}
+```
+
+![Running a group: the migration passes, then the API and the web dev server start, each waiting for the previous one](docs/images/group.gif)
+
+Each step waits before the next starts: `exit` until the command exits with code 0 (the default for one-shot commands), `ready` until it prints a local URL or its `readyPattern` (120 seconds unless `timeoutSec` says otherwise), `running` just until it has started (the default for dev servers). A failing or timed-out step stops the group there and says which step. **Stop Group** stops its commands, last one first. Steps name commands by id, `<source>:<folder>:<name>` with `root` for the workspace folder; hover a command to see its id.
+
+## Saved commands
+
+Click **+** in the view's title bar to save any command line, or right-click a command → **Save as Command…** to keep it with its arguments (e.g. *Deploy to staging*). They appear under **My commands**:
 
 ```jsonc
 {
   "commands": [
-    { "id": "django", "label": "Django server", "command": "python manage.py runserver", "cwd": "backend", "longRunning": true }
+    { "id": "django", "label": "Django server", "command": "python manage.py runserver", "cwd": "backend", "longRunning": true, "readyPattern": "Starting development server" }
   ],
   "favorites": ["npm:apps/web:dev", "saved:django"]
 }
 ```
 
-Add one with **+** in the view's title bar, or right-click any command → **Save as Command…** to keep it with its arguments (e.g. *Deploy to staging*). Set `taskHub.storage` to `private` to keep them on your machine instead.
+Set `taskHub.storage` to `private` to keep saved commands, groups and favorites on your machine instead of in the repository.
 
-**Groups** start several commands in order with one click: right-click a command → **Add to Group…**, or write them in `.vscode/task-hub.json`. Each step waits before the next one starts:
-
-```jsonc
-"groups": [
-  {
-    "label": "Start everything",
-    "steps": [
-      { "run": "compose:root:postgres" },                                  // until `docker compose up -d` is done
-      { "run": "python:backend:migrate" },                                 // until it exits with code 0 ("exit", the default)
-      { "run": "npm:apps/api:start", "waitFor": "ready", "timeoutSec": 60 }, // until it prints a local URL
-      { "run": "npm:apps/web:dev", "waitFor": "running" }                  // just started
-    ]
-  }
-]
-```
-
-A failing step stops the group there; **Stop Group** stops its commands, last one first. Steps name commands by id, `<source>:<folder>:<name>` (`root` for the workspace folder itself); hover a command to see its id.
-
-**Gradle** projects list `build`, `test`, `clean` and `assemble` (plus `run` / `bootRun` when the build applies those plugins); click **Load All Tasks** on a project's heading to fetch the rest once.
-
-## Extension Settings
+## Settings
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `taskHub.sources` | all | Which detectors are on |
+| `taskHub.sources` | all | Which sources are detected |
 | `taskHub.exclude` | `node_modules`, `.venv`, `dist`, `target`, `build`, `.vscode-test` | Folders never scanned (folders hidden by `files.exclude` are skipped too) |
-| `taskHub.longRunningNames` | `dev`, `start`, `serve`, `watch`, `run`, `bootRun`, `spring-boot:run` | Names treated as long-running |
-| `taskHub.revealTerminal` | `onFailure` | `never`, `onFailure` or `always` |
-| `taskHub.notify` | `failures` | `failures`, `all` or `never` |
-| `taskHub.openUrlIn` | `externalBrowser` | Or `simpleBrowser` (inside VS Code) |
+| `taskHub.longRunningNames` | `dev`, `start`, `serve`, `watch`, `run`, `bootRun`, `spring-boot:run` | Command names treated as long-running |
+| `taskHub.revealTerminal` | `onFailure` | When to show a command's terminal: `never`, `onFailure` or `always` |
+| `taskHub.notify` | `failures` | Which finished commands show a notification: `failures`, `all` or `never` |
+| `taskHub.openUrlIn` | `externalBrowser` | Or `simpleBrowser`, inside VS Code |
 | `taskHub.storage` | `workspaceFile` | `.vscode/task-hub.json`, or `private` |
 | `taskHub.scripts.include` | `*.sh`, `*.bash`, `*.ps1`, `*.bat`, `*.cmd` | Which files count as scripts |
 | `taskHub.scripts.runFrom` | `scriptFolder` | Or `workspaceRoot` |
 | `taskHub.scripts.maxFiles` | `200` | Stop listing scripts after this many |
-| `taskHub.gradle.defaultTasks` | `build`, `test`, `clean`, `assemble` | Tasks shown before **Load all tasks** |
+| `taskHub.gradle.defaultTasks` | `build`, `test`, `clean`, `assemble` | Gradle tasks shown before **Load All Tasks** |
 
-## Roadmap
+## Good to know
 
-| Version | Adds |
-| --- | --- |
-| 0.1 | Activity bar view, npm / pnpm / yarn / bun scripts, run and stop, live status |
-| 0.2 | Makefile, justfile, Taskfile, docker-compose, `.vscode/tasks.json`, saved commands, scripts with argument prompts |
-| 0.3 | Port detection and Open button, restart, favorites, status bar item, quick-pick runner, run history |
-| 0.4 | Groups; Django, Poe and PDM; Maven and Gradle |
-| 1.0 | Restricted Mode handling, Windows and macOS testing, Marketplace listing |
-
-## Requirements
-
-- The tools your commands use (Node.js, make, Docker, Java, Python, …) installed and on your `PATH`.
-- `.sh` scripts on Windows need Git Bash or WSL; `.ps1` scripts on Linux and macOS need PowerShell 7 (`pwsh`).
+- **Requirements**: the tools your commands use (Node.js, make, Docker, Java, Python…) on your `PATH`. On Windows, `.sh` scripts need Git Bash or WSL; on Linux and macOS, `.ps1` scripts need PowerShell 7 (`pwsh`). A row says *needs bash* or *needs pwsh* when they're missing.
+- **Restricted Mode**: in an untrusted workspace, commands are listed but not run, since running them executes code from the repository.
+- **Remote development**: Task Hub runs where your files are, so it works over SSH, in WSL and in Dev Containers.
+- **When VS Code closes**, Task Hub stops the commands it started.
+- **Privacy**: Task Hub collects no telemetry and sends nothing anywhere.
 
 ## Installation
 
-Install from the VS Code Marketplace or Open VSX once published, or from a `.vsix` file attached to a [GitHub release](https://github.com/Rajan694/task-hub/releases): see [INSTALL_FROM_VSIX.md](INSTALL_FROM_VSIX.md).
+Install **Task Hub** from the VS Code Marketplace or Open VSX, or from a `.vsix` attached to a [GitHub release](https://github.com/Rajan694/task-hub/releases) (see [INSTALL_FROM_VSIX.md](INSTALL_FROM_VSIX.md)).
 
 ## Development
 
@@ -128,7 +147,7 @@ npm run compile     # type-check, lint, bundle to dist/
 npm test            # extension tests in a downloaded VS Code
 ```
 
-Press `F5` in VS Code to open a window with the extension loaded. Packaging and publishing are described in [RELEASING.md](RELEASING.md).
+Press `F5` in VS Code to open a window with the extension loaded. The design is in [docs/DESIGN.md](docs/DESIGN.md); packaging and publishing are in [RELEASING.md](RELEASING.md).
 
 ## License
 
