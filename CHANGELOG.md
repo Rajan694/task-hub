@@ -7,4 +7,6 @@ Write new entries under **[Unreleased]**. The publish script moves them under th
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-25
+
 - Project setup: TypeScript + esbuild build, tests, packaging and release scripts.

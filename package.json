@@ -4,7 +4,7 @@
   "description": "Finds every command your project can run (npm scripts, Makefile, docker-compose, Maven, Gradle, shell and PowerShell scripts, VS Code tasks) and runs it with one click, with live status, stop, restart and port links.",
   "icon": "assets/icon.png",
   "publisher": "rajan694",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "license": "MIT",
   "repository": {
     "type": "git",
