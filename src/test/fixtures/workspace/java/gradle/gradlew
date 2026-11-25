@@ -1,0 +1,32 @@
+#!/bin/sh
+# Stands in for the Gradle wrapper: prints what `gradlew <project>:tasks --all --console=plain` prints.
+cat <<'OUT'
+
+> Task :app:tasks
+
+------------------------------------------------------------
+Tasks runnable from project ':app'
+------------------------------------------------------------
+
+Application tasks
+-----------------
+bootRun - Runs this project as a Spring Boot application.
+run - Runs this project as a JVM application
+
+Build tasks
+-----------
+assemble - Assembles the outputs of this project.
+build - Assembles and tests this project.
+
+Other tasks
+-----------
+compileJava - Compiles main Java source.
+customTask
+lib:core:compileJava - Belongs to another project.
+
+Rules
+-----
+Pattern: clean<TaskName>: Cleans the output files of a task.
+
+BUILD SUCCESSFUL in 1s
+OUT

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { Favorites } from '../favorites';
+import type { Groups, RunGroup } from '../groups';
 import { statusText } from '../format';
 import type { HubCommand, RunState, RunStatus } from '../model';
 import type { CommandRegistry } from '../registry';
@@ -14,6 +15,7 @@ export interface QuickRunDeps {
 	runner: Runner;
 	states: RunStateStore;
 	favorites: Favorites;
+	groups: Groups;
 }
 
 /** What the quick pick can ask the rest of Task Hub to do. */
@@ -22,6 +24,8 @@ export interface QuickRunActions {
 	stop(command: HubCommand): unknown;
 	showOutput(command: HubCommand): unknown;
 	openUrl(command: HubCommand): unknown;
+	runGroup(group: RunGroup): unknown;
+	stopGroup(group: RunGroup): unknown;
 }
 
 export interface Section {
@@ -72,6 +76,7 @@ export function quickRunSections({ registry, runner, states, favorites }: QuickR
 
 interface CommandItem extends vscode.QuickPickItem {
 	command?: HubCommand;
+	group?: RunGroup;
 	stopAll?: boolean;
 }
 
@@ -108,11 +113,20 @@ export function showQuickRun(deps: QuickRunDeps, actions: QuickRunActions): void
 		if (running > 1) {
 			items.push({ label: `$(debug-stop) Stop All (${running})`, stopAll: true, alwaysShow: true });
 		}
-		for (const section of quickRunSections(deps)) {
+		const sections = quickRunSections(deps);
+		// Groups go after Running and Favorites.
+		const groupsAt = sections.findIndex((s) => s.label !== 'Running' && s.label !== 'Favorites');
+		sections.forEach((section, index) => {
+			if (index === groupsAt) {
+				pushGroups(items, deps);
+			}
 			items.push({ label: section.label, kind: vscode.QuickPickItemKind.Separator });
 			for (const command of section.commands) {
 				items.push(itemFor(command, deps.states.get(command.key), deps.runner.isRunning(command.key)));
 			}
+		});
+		if (groupsAt < 0) {
+			pushGroups(items, deps);
 		}
 		const active = pick.activeItems[0]?.command?.key;
 		pick.items = items;
@@ -122,7 +136,10 @@ export function showQuickRun(deps: QuickRunDeps, actions: QuickRunActions): void
 		}
 	};
 	render();
-	const updates = deps.states.onDidChange(() => render());
+	const updates = vscode.Disposable.from(
+		deps.states.onDidChange(() => render()),
+		deps.groups.onDidChange(() => render()),
+	);
 
 	pick.onDidTriggerItemButton(({ item, button }) => {
 		const command = item.command;
@@ -148,6 +165,8 @@ export function showQuickRun(deps: QuickRunDeps, actions: QuickRunActions): void
 			for (const command of deps.runner.runningCommands()) {
 				void actions.stop(command);
 			}
+		} else if (item?.group) {
+			void (deps.groups.isRunning(item.group.key) ? actions.stopGroup(item.group) : actions.runGroup(item.group));
 		} else if (item?.command) {
 			if (deps.runner.isRunning(item.command.key)) {
 				void runningMenu(item.command, deps, actions);
@@ -161,6 +180,23 @@ export function showQuickRun(deps: QuickRunDeps, actions: QuickRunActions): void
 		pick.dispose();
 	});
 	pick.show();
+}
+
+/** One item per group: Enter runs it, or stops it while it runs. */
+function pushGroups(items: CommandItem[], { groups }: QuickRunDeps): void {
+	if (!groups.all().length) {
+		return;
+	}
+	items.push({ label: 'Groups', kind: vscode.QuickPickItemKind.Separator });
+	for (const group of groups.all()) {
+		const running = groups.isRunning(group.key);
+		const names = group.def.steps.map((step) => groups.stepCommand(group, step)?.label ?? step.run).join(' → ');
+		items.push({
+			label: `$(${running ? 'debug-stop' : 'run-all'}) ${group.def.label}`,
+			description: running ? `running — Enter stops it · ${names}` : names,
+			group,
+		});
+	}
 }
 
 function itemFor(command: HubCommand, state: RunState, isRunning: boolean): CommandItem {

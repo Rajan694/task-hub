@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
 import { ArgMemory } from './args/prompt';
 import { createDetectors } from './detectors';
+import { GradleTaskCache } from './detectors/gradle';
 import { Favorites } from './favorites';
+import { Groups } from './groups';
 import { CommandRegistry } from './registry';
 import { Runner } from './runner/runner';
 import { SavedStore } from './saved';
@@ -19,6 +21,8 @@ export interface TestApi {
 	services: ServiceMonitor;
 	saved: SavedStore;
 	favorites: Favorites;
+	groups: Groups;
+	gradleTasks: GradleTaskCache;
 	memory: ArgMemory;
 	tree: CommandsTreeProvider;
 }
@@ -31,10 +35,12 @@ export function activate(context: vscode.ExtensionContext): TestApi {
 	const runner = new Runner(states, log);
 	const saved = new SavedStore(context.workspaceState);
 	const memory = new ArgMemory(context.workspaceState);
-	const registry = new CommandRegistry(createDetectors(saved), log);
+	const gradleTasks = new GradleTaskCache(context.workspaceState);
+	const registry = new CommandRegistry(createDetectors(saved, gradleTasks), log);
 	const services = new ServiceMonitor(registry, log);
 	const favorites = new Favorites(saved, registry);
-	const tree = new CommandsTreeProvider(registry, states, services, favorites);
+	const groups = new Groups(saved, registry, runner, states);
+	const tree = new CommandsTreeProvider(registry, states, services, favorites, groups);
 	const view = vscode.window.createTreeView('taskHub.commands', { treeDataProvider: tree, showCollapseAll: true });
 	services.setVisible(view.visible);
 
@@ -46,11 +52,12 @@ export function activate(context: vscode.ExtensionContext): TestApi {
 		registry,
 		services,
 		favorites,
+		groups,
 		tree,
 		view,
 		registerStatusBar(runner, states, registry),
 		view.onDidChangeVisibility((e) => services.setVisible(e.visible)),
-		...registerCommands({ registry, runner, states, services, saved, favorites, memory, extensionId: context.extension.id }),
+		...registerCommands({ registry, runner, states, services, saved, favorites, groups, gradleTasks, memory, log, extensionId: context.extension.id }),
 	);
 
 	// A progress bar on the view during the first scan; the "nothing found" text waits for it.
@@ -58,7 +65,7 @@ export function activate(context: vscode.ExtensionContext): TestApi {
 		.withProgress({ location: { viewId: 'taskHub.commands' } }, () => registry.ready)
 		.then(() => vscode.commands.executeCommand('setContext', 'taskHub.scanned', true));
 
-	return { registry, runner, states, services, saved, favorites, memory, tree };
+	return { registry, runner, states, services, saved, favorites, groups, gradleTasks, memory, tree };
 }
 
 export function deactivate(): void {}

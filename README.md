@@ -4,7 +4,7 @@
 
 **Every command your project can run, one click away.** Task Hub is a sidebar that finds the scripts, targets and services in your workspace (npm, Makefile, docker-compose, Maven, Gradle, shell and PowerShell scripts, VS Code tasks and more) and runs them without opening or typing into a terminal.
 
-> **Status: early development.** npm-family scripts, Makefile, justfile, Taskfile, docker compose, VS Code tasks, scripts and saved commands work today, with favorites, a status bar item and a quick-pick runner (milestones 0.1 to 0.3); Python, Maven, Gradle and groups arrive next (see [Roadmap](#roadmap)). The full design is in [docs/DESIGN.md](docs/DESIGN.md).
+> **Status: early development.** Every source below works, with groups, favorites, a status bar item and a quick-pick runner (milestones 0.1 to 0.4); version 1.0 adds Windows and macOS testing and the Marketplace listing (see [Roadmap](#roadmap)). The full design is in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Features
 
@@ -62,6 +62,26 @@ Clicking a row only selects it; nothing runs until you click ▶. Right-click a 
 ```
 
 Add one with **+** in the view's title bar, or right-click any command → **Save as Command…** to keep it with its arguments (e.g. *Deploy to staging*). Set `taskHub.storage` to `private` to keep them on your machine instead.
+
+**Groups** start several commands in order with one click: right-click a command → **Add to Group…**, or write them in `.vscode/task-hub.json`. Each step waits before the next one starts:
+
+```jsonc
+"groups": [
+  {
+    "label": "Start everything",
+    "steps": [
+      { "run": "compose:root:postgres" },                                  // until `docker compose up -d` is done
+      { "run": "python:backend:migrate" },                                 // until it exits with code 0 ("exit", the default)
+      { "run": "npm:apps/api:start", "waitFor": "ready", "timeoutSec": 60 }, // until it prints a local URL
+      { "run": "npm:apps/web:dev", "waitFor": "running" }                  // just started
+    ]
+  }
+]
+```
+
+A failing step stops the group there; **Stop Group** stops its commands, last one first. Steps name commands by id, `<source>:<folder>:<name>` (`root` for the workspace folder itself); hover a command to see its id.
+
+**Gradle** projects list `build`, `test`, `clean` and `assemble` (plus `run` / `bootRun` when the build applies those plugins); click **Load All Tasks** on a project's heading to fetch the rest once.
 
 ## Extension Settings
 

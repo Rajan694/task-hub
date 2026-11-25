@@ -1,0 +1,19 @@
+[project]
+name = "demo"
+
+[tool.poe.tasks]
+test = "pytest"
+lint = { cmd = "ruff check .", help = "Lint the code" }
+serve = { shell = """
+python -m http.server
+fake = "not a task"
+""" }
+
+[tool.poe.tasks.build]
+help = "Build the wheel"
+cmd = "python -m build"
+
+[tool.pdm.scripts]
+_ = { env_file = ".env" }
+start = "flask run"
+"migrate:db" = { cmd = "alembic upgrade head", help = "Run migrations" }

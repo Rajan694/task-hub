@@ -7,5 +7,32 @@
       "command": "node -e \"console.log('hi from saved', process.cwd())\"",
       "cwd": "apps/web"
     }
+  ],
+  // Groups for the tests.
+  "groups": [
+    {
+      "id": "start",
+      "label": "Start everything",
+      "steps": [
+        { "run": "npm:root:pass" },
+        { "run": "npm:root:serve", "waitFor": "ready", "timeoutSec": 20 },
+        { "run": "script:scripts:plain.sh", "args": ["from-group"] }
+      ]
+    },
+    {
+      "id": "broken",
+      "label": "Broken",
+      "steps": [{ "run": "npm:root:fail" }, { "run": "npm:apps/web:build" }]
+    },
+    {
+      "id": "slow",
+      "label": "Never ready",
+      "steps": [{ "run": "npm:root:ask", "waitFor": "ready", "timeoutSec": 1 }]
+    },
+    {
+      "id": "missing",
+      "label": "Missing",
+      "steps": [{ "run": "npm:root:nope" }]
+    }
   ]
 }

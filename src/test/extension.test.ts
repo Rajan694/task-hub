@@ -110,6 +110,7 @@ suite('Task Hub', () => {
 			assert.deepStrictEqual(
 				groups.map((g) => (g.kind === 'group' ? g.group.label : '?')),
 				[
+					'Groups',
 					path.basename(workspaceRoot()),
 					'apps/pnpm-app',
 					'apps/web',
@@ -117,12 +118,21 @@ suite('Task Hub', () => {
 					'justfile',
 					'Taskfile.yml',
 					'compose.yaml',
+					'python/manage.py',
+					'python/pyproject.toml',
+					'python/pyproject.toml',
+					'java/maven',
+					'java/maven/api',
+					'java/maven/web',
+					'java/gradle',
+					'java/gradle/app',
+					'java/gradle/lib/core',
 					'scripts/',
 					'VS Code tasks',
 					'My commands',
 				],
 			);
-			const rows = api.tree.getChildren(groups[0]).map((node) => api.tree.getTreeItem(node));
+			const rows = api.tree.getChildren(groups[1]).map((node) => api.tree.getTreeItem(node));
 			assert.deepStrictEqual(
 				rows.map((r) => r.label),
 				['pass', 'fail', 'serve', 'ask'],

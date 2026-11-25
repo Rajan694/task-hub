@@ -190,13 +190,13 @@ Saved commands, groups and favorites live in `.vscode/task-hub.json`, so a team 
     {
       "label": "Start everything",
       "steps": [
-        { "run": "compose:postgres", "waitFor": "running" },
-        { "run": "npm:api:start",    "waitFor": "ready", "timeoutSec": 60 },
-        { "run": "npm:web:dev",      "waitFor": "ready" }
+        { "run": "compose:root:postgres",     "waitFor": "running" },
+        { "run": "npm:apps/api:start",        "waitFor": "ready", "timeoutSec": 60 },
+        { "run": "npm:apps/web:dev",          "waitFor": "ready" }
       ]
     }
   ],
-  "favorites": ["npm:web:dev", "npm:api:test"]
+  "favorites": ["npm:apps/web:dev", "npm:apps/api:test"]
 }
 ```
 
@@ -209,6 +209,14 @@ Saved commands, groups and favorites live in `.vscode/task-hub.json`, so a team 
 - `"running"` — just until the process has started.
 
 If a step fails or times out, the group stops there and shows which step failed. Stopping a group stops all its running steps in reverse order.
+
+*Settled while building v0.4:*
+
+- **Ids** are `<source>:<folder path, or root>:<name>` (`npm:apps/web:dev`, `compose:root:postgres`, `maven:services/api:test`); a group's steps and the favorites name commands of the same workspace folder.
+- **Groups** sit under a Groups heading right below Favorites; each group expands to its steps. A step without `waitFor` waits until its command exits, or, for a long-running command, until it has started. `ready` waits 120 seconds unless `timeoutSec` says otherwise; `running` still fails the group if the command dies within its first second. A compose step waits for `up -d` to finish whatever `waitFor` says. A step that times out is left running, so its output can be checked. A step may carry `args`; otherwise its command's last arguments are used. Right-click a command → **Add to Group…** picks or creates the group and what to wait for.
+- **Python** uses the project's own `.venv` or `venv` (next to the file, else at the workspace root) for `manage.py`, and its `poe` when it has one.
+- **Maven** finds the roots by following `<modules>`: a pom that no other pom lists is a root, with its wrapper.
+- **Gradle**'s **Load All Tasks** button sits on each project heading. It runs `gradlew <project>:tasks --all --console=plain` for that project only, and the list is kept in the workspace state until the settings or build file changes.
 
 ## Architecture
 

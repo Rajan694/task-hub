@@ -9,6 +9,9 @@ import { parsePs1Params } from '../args/ps1Params';
 import { parseShArgs } from '../args/shArgs';
 import { argsSummary } from '../args/summary';
 import { parseComposeServices } from '../detectors/compose';
+import { gradleRunTasks, parseGradleTasks, parseSettingsIncludes } from '../detectors/gradle';
+import { parsePom } from '../detectors/maven';
+import { parseTomlTasks, pythonFor } from '../detectors/python';
 import { parseJustRecipes } from '../detectors/just';
 import { parseMakeTargets } from '../detectors/make';
 import { parseTaskfile } from '../detectors/taskfile';
@@ -359,5 +362,121 @@ suite('saved commands file', () => {
 				['x', 'x', 'pwd', undefined],
 			],
 		);
+	});
+});
+
+suite('Python, Maven and Gradle files', () => {
+	test('Poe and PDM tasks in pyproject.toml', () => {
+		const text = lines(
+			'[project]',
+			'name = "demo"',
+			'',
+			'[tool.poe.tasks]',
+			'test = "pytest"',
+			'lint = { cmd = "ruff check .", help = "Lint the code" }',
+			'serve = { shell = """',
+			'fake = "not a task"',
+			'""" }',
+			'check = [',
+			'  "lint",',
+			']',
+			'',
+			'[tool.poe.tasks.build]',
+			'help = "Build the wheel"',
+			'',
+			'[tool.pdm.scripts]',
+			'_ = { env_file = ".env" }',
+			'"migrate:db" = { cmd = "alembic upgrade head", help = "Migrate" }',
+			'[tool.pdm.scripts.start]',
+			'cmd = "flask run"',
+		);
+		assert.deepStrictEqual(parseTomlTasks(text, 'tool.poe.tasks'), [
+			{ name: 'test', line: 4, description: undefined },
+			{ name: 'lint', line: 5, description: 'Lint the code' },
+			{ name: 'serve', line: 6, description: undefined },
+			{ name: 'check', line: 9, description: undefined },
+			{ name: 'build', line: 13, description: 'Build the wheel' },
+		]);
+		assert.deepStrictEqual(
+			parseTomlTasks(text, 'tool.pdm.scripts').map((t) => [t.name, t.description]),
+			[
+				['migrate:db', 'Migrate'],
+				['start', undefined],
+			],
+		);
+	});
+
+	test('pom.xml: own artifactId, modules, Spring Boot; parent, comments and profiles ignored', () => {
+		const pom = lines(
+			'<project>',
+			'  <parent><artifactId>spring-boot-starter-parent</artifactId></parent>',
+			'  <artifactId>shop</artifactId>',
+			'  <modules><module>api</module><module> libs/core </module></modules>',
+			'  <!-- <module>old</module> -->',
+			'  <profiles><profile><modules><module>extra</module></modules></profile></profiles>',
+			'</project>',
+		);
+		assert.deepStrictEqual(parsePom(pom), { artifactId: 'shop', modules: ['api', 'libs/core'], springBoot: false });
+		assert.strictEqual(parsePom('<project><artifactId>x</artifactId><artifactId>spring-boot-maven-plugin</artifactId></project>').springBoot, true);
+	});
+
+	test('settings.gradle includes, Groovy and Kotlin', () => {
+		assert.deepStrictEqual(parseSettingsIncludes("include ':api', 'web'\n// include 'old'\ninclude 'lib:core'\nincludeBuild 'logic'"), ['api', 'web', 'lib:core']);
+		assert.deepStrictEqual(parseSettingsIncludes('include("app", ":lib:core")\n/* include("x") */'), ['app', 'lib:core']);
+	});
+
+	test('build.gradle run tasks', () => {
+		assert.deepStrictEqual(gradleRunTasks('plugins {\n    application\n    id("org.springframework.boot") version "3"\n}'), ['run', 'bootRun']);
+		assert.deepStrictEqual(gradleRunTasks("apply plugin: 'application'"), ['run']);
+		assert.deepStrictEqual(gradleRunTasks('dependencies { implementation("org.springframework.boot:spring-boot-starter") }'), []);
+	});
+
+	test('gradle tasks --all output', () => {
+		const output = lines(
+			'> Task :app:tasks',
+			'',
+			'------------------------------------------------------------',
+			"Tasks runnable from project ':app'",
+			'------------------------------------------------------------',
+			'',
+			'Build tasks',
+			'-----------',
+			'assemble - Assembles the outputs of this project.',
+			'build - Assembles and tests this project.',
+			'',
+			'Other tasks',
+			'-----------',
+			'customTask',
+			'lib:core:compileJava - Another project.',
+			'',
+			'Rules',
+			'-----',
+			'Pattern: clean<TaskName>: Cleans the output files of a task.',
+			'',
+			'BUILD SUCCESSFUL in 1s',
+		);
+		assert.deepStrictEqual(parseGradleTasks(output), [
+			{ name: 'assemble', description: 'Assembles the outputs of this project.' },
+			{ name: 'build', description: 'Assembles and tests this project.' },
+			{ name: 'customTask', description: undefined },
+		]);
+	});
+
+	test('the project Python: a .venv next to the file, then at the root', () => {
+		const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'task-hub-py-')));
+		try {
+			const app = path.join(dir, 'app');
+			fs.mkdirSync(app);
+			const bin = process.platform === 'win32' ? path.join('.venv', 'Scripts', 'python.exe') : path.join('.venv', 'bin', 'python');
+			assert.ok(!pythonFor(app, dir).includes('.venv'));
+			fs.mkdirSync(path.dirname(path.join(dir, bin)), { recursive: true });
+			fs.writeFileSync(path.join(dir, bin), '');
+			assert.strictEqual(pythonFor(app, dir), path.join(dir, bin), 'the root venv, by full path');
+			fs.mkdirSync(path.dirname(path.join(app, bin)), { recursive: true });
+			fs.writeFileSync(path.join(app, bin), '');
+			assert.strictEqual(pythonFor(app, dir), bin.split(path.sep).join('/'), 'its own venv, relative');
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
 	});
 });

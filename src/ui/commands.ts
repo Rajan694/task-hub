@@ -3,7 +3,9 @@ import * as vscode from 'vscode';
 import { ArgMemory, askExtraArgs, askForArgs } from '../args/prompt';
 import { readSettings } from '../config';
 import { isLongRunning } from '../detectors/common';
+import type { GradleTaskCache } from '../detectors/gradle';
 import type { Favorites } from '../favorites';
+import type { Groups } from '../groups';
 import { failureReason, formatDuration } from '../format';
 import type { HubCommand } from '../model';
 import type { CommandRegistry } from '../registry';
@@ -13,6 +15,7 @@ import { SavedStore } from '../saved';
 import type { ServiceMonitor } from '../services';
 import { quoteArg } from '../shell';
 import type { RunStateStore } from '../state';
+import { registerGroupCommands } from './groupCommands';
 import { showQuickRun } from './quickPick';
 import type { TreeNode } from './treeProvider';
 
@@ -23,8 +26,25 @@ interface Deps {
 	services: ServiceMonitor;
 	saved: SavedStore;
 	favorites: Favorites;
+	groups: Groups;
+	gradleTasks: GradleTaskCache;
 	memory: ArgMemory;
+	log: vscode.LogOutputChannel;
 	extensionId: string;
+}
+
+/** Commands run code from the workspace, so Restricted Mode blocks them. */
+function trusted(): boolean {
+	if (vscode.workspace.isTrusted) {
+		return true;
+	}
+	void vscode.window
+		.showWarningMessage(
+			'Task Hub does not run commands in Restricted Mode, because running them executes code from this workspace.',
+			'Manage Workspace Trust',
+		)
+		.then((choice) => choice && vscode.commands.executeCommand('workbench.trust.manage'));
+	return false;
 }
 
 const UNAVAILABLE_HELP: Record<string, string> = {
@@ -34,20 +54,8 @@ const UNAVAILABLE_HELP: Record<string, string> = {
 
 type How = 'run' | 'withArgs' | 'again' | 'restart';
 
-export function registerCommands({ registry, runner, states, services, saved, favorites, memory, extensionId }: Deps): vscode.Disposable[] {
-	/** Commands run code from the workspace, so Restricted Mode blocks them. */
-	const trusted = (): boolean => {
-		if (vscode.workspace.isTrusted) {
-			return true;
-		}
-		void vscode.window
-			.showWarningMessage(
-				'Task Hub does not run commands in Restricted Mode, because running them executes code from this workspace.',
-				'Manage Workspace Trust',
-			)
-			.then((choice) => choice && vscode.commands.executeCommand('workbench.trust.manage'));
-		return false;
-	};
+export function registerCommands(deps: Deps): vscode.Disposable[] {
+	const { registry, runner, states, services, saved, favorites, groups, memory, extensionId } = deps;
 
 	/** Asks for arguments when the command takes them, then starts it. Returns whether it started. */
 	const start = async (command: HubCommand, how: How = 'run'): Promise<boolean> => {
@@ -105,12 +113,14 @@ export function registerCommands({ registry, runner, states, services, saved, fa
 		vscode.commands.registerCommand('taskHub.quickRun', async () => {
 			await registry.ready;
 			showQuickRun(
-				{ registry, runner, states, favorites },
+				{ registry, runner, states, favorites, groups },
 				{
 					run: (command, how) => start(command, how),
 					stop: (command) => runner.stop(command.key),
 					showOutput: (command) => runner.showOutput(command),
 					openUrl,
+					runGroup: (group) => trusted() && groups.run(group.key),
+					stopGroup: (group) => groups.stop(group.key),
 				},
 			);
 		}),
@@ -144,7 +154,10 @@ export function registerCommands({ registry, runner, states, services, saved, fa
 			}
 		}),
 		vscode.commands.registerCommand('taskHub.goToDefinition', async (node?: TreeNode) => {
-			if (node?.kind === 'group' && node.group.definedAt) {
+			if (node?.kind === 'runGroup' && node.runGroup.file) {
+				const line = node.runGroup.def.line ?? 0;
+				await vscode.window.showTextDocument(node.runGroup.file, { selection: new vscode.Range(line, 0, line, 0) });
+			} else if (node?.kind === 'group' && node.group.definedAt) {
 				await vscode.window.showTextDocument(node.group.definedAt);
 			} else if (node?.kind === 'command' && node.command.definedAt) {
 				const { uri, range } = node.command.definedAt;
@@ -152,6 +165,7 @@ export function registerCommands({ registry, runner, states, services, saved, fa
 			}
 		}),
 		vscode.commands.registerCommand('taskHub.addCommand', () => addCommand(saved, registry)),
+		...registerGroupCommands({ ...deps, trusted }),
 		vscode.commands.registerCommand('taskHub.refresh', async () => {
 			await registry.scan();
 			await services.refresh();

@@ -1,7 +1,7 @@
 import type * as vscode from 'vscode';
 import type { Settings } from './config';
 
-/** Where a command was found. `python`, `maven` and `gradle` arrive with milestone v0.4. */
+/** Where a command was found. */
 export type SourceKind =
 	| 'npm'
 	| 'make'
@@ -26,6 +26,8 @@ export interface CommandGroup {
 	tooltip?: string;
 	/** The file the group's commands come from, for Go to Definition. */
 	definedAt?: vscode.Uri;
+	/** Gradle: how to fetch the project's full task list (Load All Tasks); unset once it's loaded. */
+	loadAllTasks?: { cacheKey: string; signature: string; cwd: string; commandLine: string };
 }
 
 /** One argument a script or recipe takes, asked for before it runs. */

@@ -21,6 +21,7 @@ export interface Settings {
 	scriptsInclude: readonly string[];
 	scriptsRunFrom: ScriptsRunFrom;
 	scriptsMaxFiles: number;
+	gradleDefaultTasks: readonly string[];
 }
 
 /** Settings whose change means the command list has to be detected again. */
@@ -30,6 +31,7 @@ export const RESCAN_SETTINGS = [
 	`${SECTION}.longRunningNames`,
 	`${SECTION}.storage`,
 	`${SECTION}.scripts`,
+	`${SECTION}.gradle`,
 	'files.exclude',
 ];
 
@@ -52,5 +54,6 @@ export function readSettings(scope?: vscode.ConfigurationScope): Settings {
 		scriptsInclude: config.get<string[]>('scripts.include', []),
 		scriptsRunFrom: config.get<ScriptsRunFrom>('scripts.runFrom', 'scriptFolder'),
 		scriptsMaxFiles: config.get<number>('scripts.maxFiles', 200),
+		gradleDefaultTasks: config.get<string[]>('gradle.defaultTasks', ['build', 'test', 'clean', 'assemble']),
 	};
 }

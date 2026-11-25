@@ -15,6 +15,27 @@ export interface SavedCommand {
 	readyPattern?: string;
 }
 
+export type WaitFor = 'exit' | 'ready' | 'running';
+
+/** One step of a group: which command, and what to wait for before the next step starts. */
+export interface GroupStep {
+	/** A command id, e.g. "npm:apps/api:start", from the same workspace folder. */
+	run: string;
+	waitFor?: WaitFor;
+	timeoutSec?: number;
+	/** Arguments for the command; its last ones when absent. */
+	args?: string[];
+}
+
+/** One entry of `groups` in .vscode/task-hub.json: commands started in order with one click. */
+export interface SavedGroup {
+	id: string;
+	label: string;
+	steps: GroupStep[];
+	/** Zero-based line of the group in task-hub.json. */
+	line?: number;
+}
+
 export interface SavedList {
 	commands: (SavedCommand & { line?: number })[];
 	/** The file they come from; undefined for private storage. */
@@ -23,6 +44,7 @@ export interface SavedList {
 
 const PRIVATE_KEY = 'taskHub.savedCommands';
 const FAVORITES_KEY = 'taskHub.favorites';
+const GROUPS_KEY = 'taskHub.groups';
 const FORMAT = { formattingOptions: { insertSpaces: true, tabSize: 2, eol: '\n' } };
 
 /**
@@ -70,17 +92,7 @@ export class SavedStore implements vscode.Disposable {
 
 	/** Saves a new command and returns it with its id (made from the label, unique in the folder). */
 	async add(folder: vscode.WorkspaceFolder, command: Omit<SavedCommand, 'id'>): Promise<SavedCommand> {
-		const existing = new Set((await this.list(folder)).commands.map((c) => c.id));
-		const base =
-			command.label
-				.toLowerCase()
-				.replace(/[^a-z0-9]+/g, '-')
-				.replace(/^-+|-+$/g, '')
-				.slice(0, 40) || 'command';
-		let id = base;
-		for (let n = 2; existing.has(id); n++) {
-			id = `${base}-${n}`;
-		}
+		const id = uniqueId(command.label, new Set((await this.list(folder)).commands.map((c) => c.id)), 'command');
 		const saved: SavedCommand = { id, ...withoutEmpty(command) };
 
 		if (this.isPrivate(folder)) {
@@ -148,6 +160,81 @@ export class SavedStore implements vscode.Disposable {
 		this.changed.fire();
 	}
 
+	/** The folder's groups, with the line of each in task-hub.json. */
+	async groups(folder: vscode.WorkspaceFolder): Promise<{ groups: SavedGroup[]; file?: vscode.Uri }> {
+		if (this.isPrivate(folder)) {
+			const value = this.state.get<unknown[]>(`${GROUPS_KEY}:${folder.uri.toString()}`, []);
+			return { groups: value.map(validateGroup).filter((g): g is SavedGroup => g !== undefined) };
+		}
+		const file = SavedStore.fileOf(folder);
+		const text = await readFile(file);
+		if (text === undefined) {
+			return { groups: [], file };
+		}
+		const json = parse(text, [], { allowTrailingComma: true }) as { groups?: unknown } | undefined;
+		const tree = parseTree(text, [], { allowTrailingComma: true });
+		const groups: SavedGroup[] = [];
+		(Array.isArray(json?.groups) ? json.groups : []).forEach((entry: unknown, index: number) => {
+			const group = validateGroup(entry);
+			if (group) {
+				const node = tree && findNodeAtLocation(tree, ['groups', index]);
+				groups.push({ ...group, line: node ? positionAt(text, node.offset).line : undefined });
+			}
+		});
+		return { groups, file };
+	}
+
+	/** Adds a step to a group, creating the group when `group` is a new label. Returns the group's id. */
+	async addStep(folder: vscode.WorkspaceFolder, group: { id: string } | { label: string }, step: GroupStep): Promise<string> {
+		const { groups } = await this.groups(folder);
+		const index = 'id' in group ? groups.findIndex((g) => g.id === group.id) : -1;
+		const id = index >= 0 ? groups[index].id : uniqueId('label' in group ? group.label : 'group', new Set(groups.map((g) => g.id)), 'group');
+		const created = { id, label: 'label' in group ? group.label : id, steps: [step] };
+		if (this.isPrivate(folder)) {
+			const key = `${GROUPS_KEY}:${folder.uri.toString()}`;
+			const next = groups.map(({ line: _line, ...g }) => (g.id === id ? { ...g, steps: [...g.steps, step] } : g));
+			await this.state.update(key, index >= 0 ? next : [...next, created]);
+		} else {
+			// Find the group's index in the file itself, which may also hold entries Task Hub skipped as invalid.
+			const file = SavedStore.fileOf(folder);
+			let text = (await readFile(file)) ?? '{}\n';
+			const json = parse(text, [], { allowTrailingComma: true }) as { groups?: unknown } | undefined;
+			const list = Array.isArray(json?.groups) ? json.groups : undefined;
+			const fileIndex = list ? list.findIndex((g: unknown) => validateGroup(g)?.id === id) : -1;
+			if (fileIndex >= 0) {
+				text = applyEdits(text, modify(text, ['groups', fileIndex, 'steps', -1], step, { ...FORMAT, isArrayInsertion: true }));
+			} else if (list) {
+				text = applyEdits(text, modify(text, ['groups', -1], created, { ...FORMAT, isArrayInsertion: true }));
+			} else {
+				text = applyEdits(text, modify(text, ['groups'], [created], FORMAT));
+			}
+			await fs.promises.mkdir(vscode.Uri.joinPath(folder.uri, '.vscode').fsPath, { recursive: true });
+			await fs.promises.writeFile(file.fsPath, text);
+		}
+		this.changed.fire();
+		return id;
+	}
+
+	async removeGroup(folder: vscode.WorkspaceFolder, id: string): Promise<void> {
+		if (this.isPrivate(folder)) {
+			const { groups } = await this.groups(folder);
+			await this.state.update(
+				`${GROUPS_KEY}:${folder.uri.toString()}`,
+				groups.filter((g) => g.id !== id).map(({ line: _line, ...g }) => g),
+			);
+		} else {
+			const file = SavedStore.fileOf(folder);
+			const text = await readFile(file);
+			const json = text === undefined ? undefined : (parse(text, [], { allowTrailingComma: true }) as { groups?: unknown });
+			const index = Array.isArray(json?.groups) ? json.groups.findIndex((g: unknown) => validateGroup(g)?.id === id) : -1;
+			if (text === undefined || index < 0) {
+				return;
+			}
+			await fs.promises.writeFile(file.fsPath, applyEdits(text, modify(text, ['groups', index], undefined, FORMAT)));
+		}
+		this.changed.fire();
+	}
+
 	private privateKey(folder: vscode.WorkspaceFolder): string {
 		return `${PRIVATE_KEY}:${folder.uri.toString()}`;
 	}
@@ -180,6 +267,50 @@ function validate(entry: unknown): SavedCommand | undefined {
 		longRunning: typeof e.longRunning === 'boolean' ? e.longRunning : undefined,
 		readyPattern: typeof e.readyPattern === 'string' && e.readyPattern ? e.readyPattern : undefined,
 	};
+}
+
+const WAIT_FOR: readonly WaitFor[] = ['exit', 'ready', 'running'];
+
+/** A group with a label and at least one valid step, or undefined. A missing id falls back to the label. */
+function validateGroup(entry: unknown): SavedGroup | undefined {
+	if (!entry || typeof entry !== 'object') {
+		return undefined;
+	}
+	const e = entry as Record<string, unknown>;
+	const steps = (Array.isArray(e.steps) ? e.steps : [])
+		.map((raw: unknown): GroupStep | undefined => {
+			const s = raw as Record<string, unknown> | undefined;
+			if (!s || typeof s.run !== 'string' || !s.run) {
+				return undefined;
+			}
+			return {
+				run: s.run,
+				waitFor: WAIT_FOR.includes(s.waitFor as WaitFor) ? (s.waitFor as WaitFor) : undefined,
+				timeoutSec: typeof s.timeoutSec === 'number' && s.timeoutSec > 0 ? s.timeoutSec : undefined,
+				args: Array.isArray(s.args) ? s.args.filter((a): a is string => typeof a === 'string') : undefined,
+			};
+		})
+		.filter((s): s is GroupStep => s !== undefined);
+	const label = typeof e.label === 'string' && e.label.trim() ? e.label : undefined;
+	if (!label || !steps.length) {
+		return undefined;
+	}
+	return { id: typeof e.id === 'string' && e.id ? e.id : label, label, steps };
+}
+
+/** "Django server" → "django-server", or "django-server-2" when that's taken. */
+function uniqueId(label: string, taken: ReadonlySet<string>, fallback: string): string {
+	const base =
+		label
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/^-+|-+$/g, '')
+			.slice(0, 40) || fallback;
+	let id = base;
+	for (let n = 2; taken.has(id); n++) {
+		id = `${base}-${n}`;
+	}
+	return id;
 }
 
 function withoutEmpty<T extends object>(value: T): T {

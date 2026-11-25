@@ -151,6 +151,36 @@
         "icon": "$(star-full)"
       },
       {
+        "command": "taskHub.addToGroup",
+        "title": "Add to Group…",
+        "category": "Task Hub",
+        "icon": "$(list-ordered)"
+      },
+      {
+        "command": "taskHub.runGroup",
+        "title": "Run Group",
+        "category": "Task Hub",
+        "icon": "$(play)"
+      },
+      {
+        "command": "taskHub.stopGroup",
+        "title": "Stop Group",
+        "category": "Task Hub",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "taskHub.deleteGroup",
+        "title": "Delete Group",
+        "category": "Task Hub",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "taskHub.loadAllTasks",
+        "title": "Load All Tasks",
+        "category": "Task Hub",
+        "icon": "$(list-unordered)"
+      },
+      {
         "command": "taskHub.serviceLogs",
         "title": "Logs",
         "category": "Task Hub",
@@ -249,6 +279,26 @@
         {
           "command": "taskHub.removeFavorite",
           "when": "false"
+        },
+        {
+          "command": "taskHub.addToGroup",
+          "when": "false"
+        },
+        {
+          "command": "taskHub.runGroup",
+          "when": "false"
+        },
+        {
+          "command": "taskHub.stopGroup",
+          "when": "false"
+        },
+        {
+          "command": "taskHub.deleteGroup",
+          "when": "false"
+        },
+        {
+          "command": "taskHub.loadAllTasks",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -346,7 +396,7 @@
         },
         {
           "command": "taskHub.goToDefinition",
-          "when": "view == taskHub.commands && viewItem =~ /^(cmd\\.|group\\.file$)/",
+          "when": "view == taskHub.commands && viewItem =~ /^(cmd\\.|rungroup\\.|group\\.file(\\+|$))/",
           "group": "3_navigate@1"
         },
         {
@@ -373,6 +423,46 @@
           "command": "taskHub.removeFavorite",
           "when": "view == taskHub.commands && viewItem =~ /\\+fav/",
           "group": "5_favorites@1"
+        },
+        {
+          "command": "taskHub.runGroup",
+          "when": "view == taskHub.commands && viewItem == rungroup.idle",
+          "group": "inline@2"
+        },
+        {
+          "command": "taskHub.stopGroup",
+          "when": "view == taskHub.commands && viewItem == rungroup.running",
+          "group": "inline@6"
+        },
+        {
+          "command": "taskHub.loadAllTasks",
+          "when": "view == taskHub.commands && viewItem =~ /\\+loadall/",
+          "group": "inline@1"
+        },
+        {
+          "command": "taskHub.runGroup",
+          "when": "view == taskHub.commands && viewItem == rungroup.idle",
+          "group": "1_run@1"
+        },
+        {
+          "command": "taskHub.stopGroup",
+          "when": "view == taskHub.commands && viewItem == rungroup.running",
+          "group": "1_run@2"
+        },
+        {
+          "command": "taskHub.loadAllTasks",
+          "when": "view == taskHub.commands && viewItem =~ /\\+loadall/",
+          "group": "1_run@7"
+        },
+        {
+          "command": "taskHub.addToGroup",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\./",
+          "group": "5_favorites@2"
+        },
+        {
+          "command": "taskHub.deleteGroup",
+          "when": "view == taskHub.commands && viewItem =~ /^rungroup\\./",
+          "group": "6_saved@2"
         }
       ]
     },

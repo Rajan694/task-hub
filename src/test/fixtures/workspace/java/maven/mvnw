@@ -1,0 +1,3 @@
+#!/bin/sh
+# Stands in for the Maven wrapper.
+echo "mvnw $*"

@@ -3,6 +3,8 @@ import * as vscode from 'vscode';
 import { failureReason, formatAgo, formatDuration, statusText } from '../format';
 import type { CommandGroup, HubCommand, RunState, SourceKind } from '../model';
 import type { Favorites } from '../favorites';
+import { defaultWaitFor, type GroupRunState, type Groups, type RunGroup } from '../groups';
+import type { WaitFor } from '../saved';
 import type { CommandRegistry } from '../registry';
 import type { ServiceMonitor } from '../services';
 import type { RunStateStore } from '../state';
@@ -10,24 +12,35 @@ import type { RunStateStore } from '../state';
 export interface GroupNode {
 	readonly kind: 'group';
 	readonly group: CommandGroup;
-	readonly source: SourceKind | 'favorites';
-	/** Undefined for Favorites, which spans folders. */
+	readonly source: SourceKind | 'favorites' | 'groups';
+	/** Undefined for Favorites and Groups, which span folders. */
 	readonly folder: vscode.WorkspaceFolder | undefined;
+	readonly children: (CommandNode | RunGroupNode)[];
+}
+
+/** A group of commands run in order (under the Groups heading); its children are its steps. */
+export interface RunGroupNode {
+	readonly kind: 'runGroup';
+	readonly runGroup: RunGroup;
+	readonly parent: GroupNode;
 	readonly children: CommandNode[];
 }
 
 export interface CommandNode {
 	readonly kind: 'command';
 	readonly command: HubCommand;
-	readonly parent: GroupNode;
+	readonly parent: GroupNode | RunGroupNode;
 	/** A copy of the row under Favorites. */
 	readonly favorite?: boolean;
+	/** A copy of the row as a step of a group. */
+	readonly step?: { index: number; waitFor: WaitFor };
 }
 
-export type TreeNode = GroupNode | CommandNode;
+export type TreeNode = GroupNode | RunGroupNode | CommandNode;
 
-const GROUP_ICONS: Record<SourceKind | 'favorites', string> = {
+const GROUP_ICONS: Record<SourceKind | 'favorites' | 'groups', string> = {
 	favorites: 'star-full',
+	groups: 'run-all',
 	npm: 'package',
 	make: 'tools',
 	just: 'checklist',
@@ -46,8 +59,11 @@ export class CommandsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
 	private roots: GroupNode[] = [];
 	/** Each command's row in its own group. */
 	private byKey = new Map<string, CommandNode>();
-	/** Every row of each command: its own, and its copy under Favorites. */
+	/** Every row of each command: its own, and its copies under Favorites and groups. */
 	private rowsByKey = new Map<string, CommandNode[]>();
+	/** Each group's row, and the group rows each command is a step of. */
+	private groupRows = new Map<string, RunGroupNode>();
+	private groupsByCommand = new Map<string, RunGroupNode[]>();
 	private readonly changed = new vscode.EventEmitter<TreeNode | undefined>();
 	readonly onDidChangeTreeData = this.changed.event;
 	private readonly disposables: vscode.Disposable[];
@@ -57,6 +73,7 @@ export class CommandsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
 		private readonly states: RunStateStore,
 		private readonly services: ServiceMonitor,
 		private readonly favorites: Favorites,
+		private readonly groups: Groups,
 	) {
 		this.rebuild();
 		this.disposables = [
@@ -69,8 +86,17 @@ export class CommandsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
 				this.rebuild();
 				this.changed.fire(undefined);
 			}),
+			groups.onDidChange((key) => {
+				const node = key && this.groupRows.get(key);
+				if (node) {
+					this.changed.fire(node);
+				} else if (!key) {
+					this.rebuild();
+					this.changed.fire(undefined);
+				}
+			}),
 			states.onDidChange((key) => {
-				for (const node of this.rowsByKey.get(key) ?? []) {
+				for (const node of [...(this.rowsByKey.get(key) ?? []), ...(this.groupsByCommand.get(key) ?? [])]) {
 					this.changed.fire(node);
 				}
 			}),
@@ -95,11 +121,11 @@ export class CommandsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
 		if (!node) {
 			return this.roots;
 		}
-		return node.kind === 'group' ? node.children : [];
+		return node.kind === 'command' ? [] : node.children;
 	}
 
 	getParent(node: TreeNode): TreeNode | undefined {
-		return node.kind === 'command' ? node.parent : undefined;
+		return node.kind === 'group' ? undefined : node.parent;
 	}
 
 	getTreeItem(node: TreeNode): vscode.TreeItem {
@@ -110,15 +136,40 @@ export class CommandsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
 			item.tooltip = node.group.tooltip;
 			item.iconPath = new vscode.ThemeIcon(GROUP_ICONS[node.source]);
 			item.contextValue = node.group.definedAt ? 'group.file' : 'group';
+			if (node.group.loadAllTasks) {
+				item.contextValue += '+loadall';
+			}
+			return item;
+		}
+		if (node.kind === 'runGroup') {
+			const { runGroup } = node;
+			const names = runGroup.def.steps.map((step) => this.groups.stepCommand(runGroup, step)?.label ?? `${step.run} (missing)`);
+			const row = groupRowState(this.groups.state(runGroup.key), this.groups.isRunning(runGroup.key), names);
+			const item = new vscode.TreeItem(runGroup.def.label, vscode.TreeItemCollapsibleState.Collapsed);
+			item.id = `rungroup:${runGroup.key}`;
+			item.description = row.text;
+			item.iconPath = row.icon;
+			item.contextValue = row.contextValue;
+			item.tooltip = groupTooltip(runGroup, this.groups.state(runGroup.key), names);
 			return item;
 		}
 		const { command } = node;
 		const state = this.states.get(command.key);
 		const row = rowState(command, state, this.services.isRunning(command.key), this.favorites.isFavorite(command));
 		const item = new vscode.TreeItem(command.label, vscode.TreeItemCollapsibleState.None);
-		item.id = node.favorite ? `favorite:${command.key}` : command.key;
-		// Under Favorites the row also says where the command comes from: "apps/web — running · :5173".
-		item.description = node.favorite ? [command.group.label, row.contextValue.startsWith('cmd.idle') ? '' : row.text].filter(Boolean).join(' — ') : row.text;
+		const idle = row.contextValue.startsWith('cmd.idle');
+		if (node.step) {
+			// A step: where it comes from, and what the group waits for (or its status once it ran).
+			item.id = `step:${(node.parent as RunGroupNode).runGroup.key}:${node.step.index}`;
+			item.description = `${command.group.label} — ${idle ? WAIT_LABELS[node.step.waitFor] : row.text}`;
+		} else if (node.favorite) {
+			// Under Favorites the row also says where the command comes from: "apps/web — running · :5173".
+			item.id = `favorite:${command.key}`;
+			item.description = [command.group.label, idle ? '' : row.text].filter(Boolean).join(' — ');
+		} else {
+			item.id = command.key;
+			item.description = row.text;
+		}
 		item.iconPath = row.icon;
 		item.contextValue = row.contextValue;
 		// The tooltip is built on hover (resolveTreeItem), so "12s ago" is current.
@@ -164,9 +215,43 @@ export class CommandsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
 			}
 			roots.unshift(favorites);
 		}
+
+		const groupRows = new Map<string, RunGroupNode>();
+		const groupsByCommand = new Map<string, RunGroupNode[]>();
+		if (this.groups.all().length) {
+			const heading: GroupNode = {
+				kind: 'group',
+				group: { id: 'groups', label: 'Groups', tooltip: 'Commands started in order with one click. Right-click a command → Add to Group…' },
+				source: 'groups',
+				folder: undefined,
+				children: [],
+			};
+			for (const runGroup of this.groups.all()) {
+				const node: RunGroupNode = { kind: 'runGroup', runGroup, parent: heading, children: [] };
+				runGroup.def.steps.forEach((step, index) => {
+					const command = this.groups.stepCommand(runGroup, step);
+					if (command) {
+						const stepNode: CommandNode = { kind: 'command', command, parent: node, step: { index, waitFor: step.waitFor ?? defaultWaitFor(command) } };
+						node.children.push(stepNode);
+						rowsByKey.get(command.key)?.push(stepNode);
+						groupsByCommand.set(command.key, [...(groupsByCommand.get(command.key) ?? []), node]);
+					}
+				});
+				heading.children.push(node);
+				groupRows.set(runGroup.key, node);
+			}
+			roots.splice(favoriteCommands.length ? 1 : 0, 0, heading);
+		}
 		this.roots = roots;
 		this.byKey = byKey;
 		this.rowsByKey = rowsByKey;
+		this.groupRows = groupRows;
+		this.groupsByCommand = groupsByCommand;
+	}
+
+	/** The row of a group, if it is in the tree. */
+	groupNodeFor(key: string): RunGroupNode | undefined {
+		return this.groupRows.get(key);
 	}
 
 	dispose(): void {
@@ -178,6 +263,54 @@ interface RowState {
 	text: string;
 	icon: vscode.ThemeIcon;
 	contextValue: string;
+}
+
+const WAIT_LABELS: Record<WaitFor, string> = {
+	exit: 'waits for it to finish',
+	ready: 'waits until ready',
+	running: 'waits until started',
+};
+
+/**
+ * What a group's row shows: its steps (`postgres → api → web`) while idle, the step it is on
+ * while starting, *running* while any of its commands runs, or where it failed. The context
+ * value is `rungroup.running` (Stop) or `rungroup.idle` (Run).
+ */
+export function groupRowState(state: GroupRunState, running: boolean, stepNames: readonly string[]): RowState {
+	const contextValue = running ? 'rungroup.running' : 'rungroup.idle';
+	const green = new vscode.ThemeColor('testing.iconPassed');
+	switch (state.status) {
+		case 'running': {
+			const step = state.step ?? 0;
+			return { text: `step ${step + 1}/${stepNames.length}: ${stepNames[step]}`, icon: new vscode.ThemeIcon('sync~spin'), contextValue };
+		}
+		case 'failed':
+			return {
+				text: `failed at ${stepNames[state.step ?? 0] ?? 'a step'}`,
+				icon: new vscode.ThemeIcon('error', new vscode.ThemeColor('testing.iconFailed')),
+				contextValue,
+			};
+		case 'stopped':
+			return { text: 'stopped', icon: new vscode.ThemeIcon('debug-stop'), contextValue };
+		case 'done':
+			return running
+				? { text: 'running', icon: new vscode.ThemeIcon('vm-running', green), contextValue }
+				: { text: 'done', icon: new vscode.ThemeIcon('pass', green), contextValue };
+		default:
+			return { text: stepNames.join(' → '), icon: new vscode.ThemeIcon(running ? 'vm-running' : 'run-all', running ? green : undefined), contextValue };
+	}
+}
+
+function groupTooltip(group: RunGroup, state: GroupRunState, stepNames: readonly string[]): vscode.MarkdownString {
+	const md = new vscode.MarkdownString(`**${escape(group.def.label)}**\n\n`);
+	group.def.steps.forEach((step, i) => {
+		md.appendText(`${i + 1}. ${stepNames[i]}${step.waitFor ? ` (waits for ${step.waitFor}${step.timeoutSec ? `, ${step.timeoutSec}s` : ''})` : ''}\n`);
+	});
+	if (state.message) {
+		md.appendMarkdown('\n');
+		md.appendText(`Stopped at step ${(state.step ?? 0) + 1}: ${state.message}`);
+	}
+	return md;
 }
 
 /**
@@ -274,6 +407,7 @@ function commandTooltip(command: HubCommand, state: RunState, serviceUp: boolean
 	}
 	const relative = path.relative(command.folder.uri.fsPath, command.cwd.fsPath).split(path.sep).join('/');
 	md.appendMarkdown(`Runs in: \`${command.folder.name}${relative ? `/${relative}` : ''}\`${command.vscodeTask ? ' (by VS Code)' : ''}\n\n`);
+	md.appendMarkdown(`Id: \`${command.id.replace(/`/g, "'")}\` (for groups and favorites in task-hub.json)\n\n`);
 
 	const now = Date.now();
 	if (command.service && serviceUp) {
