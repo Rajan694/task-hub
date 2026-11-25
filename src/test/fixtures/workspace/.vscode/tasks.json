@@ -1,0 +1,25 @@
+{
+  // Comments and trailing commas are allowed here, as in VS Code.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "echo-task",
+      "type": "shell",
+      "command": "echo hello-from-task",
+      "detail": "Says hello",
+      "problemMatcher": []
+    },
+    {
+      "label": "failing-task",
+      "type": "shell",
+      "command": "exit 2",
+      "problemMatcher": []
+    },
+    {
+      "label": "hidden-task",
+      "type": "shell",
+      "command": "echo hidden",
+      "hide": true,
+    },
+  ],
+}

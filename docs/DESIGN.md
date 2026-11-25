@@ -89,6 +89,15 @@ Each source is one small detector. Detectors re-run when their files change (deb
 
 Java's `spring-boot:run`, `bootRun` and Gradle's `run` are long-running too. **Load all tasks** runs `gradlew tasks --all --console=plain` once, since starting Gradle is slow, and caches the list until a build file changes.
 
+*Settled while building v0.2:*
+
+- **docker compose** rows take their state from `docker compose ps` in the file's folder, not from the `up -d` process (which ends at once). A service shows *running* whoever started it, with **Logs** (`logs -f --tail 200`) and **Stop Service**. The state refreshes after each compose command, when the view becomes visible, and every 15 seconds while it is.
+- **justfile** recipe parameters (`deploy env target='web' +files`) are asked for like script arguments.
+- **Taskfile** also matches `Taskfile.yaml` and the `.dist` variants, in Task's own order; a folder with several Makefiles, justfiles, Taskfiles or compose files lists only the one the tool would use.
+- **PowerShell on Windows** falls back to Windows PowerShell (`powershell.exe`) when PowerShell 7 isn't installed. **bash on Windows** is Git Bash when it's in its usual folder, else whatever `bash` is on `PATH` (WSL's works, since scripts are passed by relative path).
+- **VS Code tasks**' Show Output opens the task's own terminal, found by the task's name.
+- Reading `tasks.json` and editing `task-hub.json` without losing comments uses Microsoft's `jsonc-parser`, bundled into `dist/extension.js` (still no runtime `node_modules`).
+
 ### Nested package.json files
 
 Every `package.json` outside `node_modules` becomes its own group, labeled by its path (`apps/web`, `packages/ui`), and its scripts run in that package's folder. The package manager comes from the nearest `packageManager` field or lockfile found by walking up from the package to the workspace root, because in npm, pnpm, yarn and bun workspaces the lockfile lives only at the root.

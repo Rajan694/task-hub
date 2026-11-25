@@ -85,6 +85,12 @@
         "icon": "$(play)"
       },
       {
+        "command": "taskHub.runWithArgs",
+        "title": "Run with Arguments…",
+        "category": "Task Hub",
+        "icon": "$(play)"
+      },
+      {
         "command": "taskHub.stop",
         "title": "Stop",
         "category": "Task Hub",
@@ -119,6 +125,30 @@
         "title": "Copy Command",
         "category": "Task Hub",
         "icon": "$(copy)"
+      },
+      {
+        "command": "taskHub.saveAsCommand",
+        "title": "Save as Command…",
+        "category": "Task Hub",
+        "icon": "$(bookmark)"
+      },
+      {
+        "command": "taskHub.deleteSavedCommand",
+        "title": "Delete Saved Command",
+        "category": "Task Hub",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "taskHub.serviceLogs",
+        "title": "Logs",
+        "category": "Task Hub",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "taskHub.serviceStop",
+        "title": "Stop Service",
+        "category": "Task Hub",
+        "icon": "$(debug-stop)"
       },
       {
         "command": "taskHub.addCommand",
@@ -173,6 +203,26 @@
         {
           "command": "taskHub.copyCommand",
           "when": "false"
+        },
+        {
+          "command": "taskHub.runWithArgs",
+          "when": "false"
+        },
+        {
+          "command": "taskHub.saveAsCommand",
+          "when": "false"
+        },
+        {
+          "command": "taskHub.deleteSavedCommand",
+          "when": "false"
+        },
+        {
+          "command": "taskHub.serviceLogs",
+          "when": "false"
+        },
+        {
+          "command": "taskHub.serviceStop",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -195,63 +245,98 @@
       "view/item/context": [
         {
           "command": "taskHub.openUrl",
-          "when": "view == taskHub.commands && viewItem == cmd.running.url",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.running\\.url(\\+|$)/",
           "group": "inline@1"
         },
         {
           "command": "taskHub.run",
-          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.(idle|passed|failed|stopped)$/",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.(idle|passed|failed|stopped)(\\+|$)/",
           "group": "inline@2"
         },
         {
           "command": "taskHub.showOutput",
-          "when": "view == taskHub.commands && viewItem == cmd.failed",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.failed(\\+|$)/",
           "group": "inline@3"
         },
         {
-          "command": "taskHub.stop",
-          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.running/",
+          "command": "taskHub.serviceLogs",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.up\\+/",
           "group": "inline@4"
         },
         {
-          "command": "taskHub.restart",
-          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.running/",
+          "command": "taskHub.serviceStop",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.up\\+/",
           "group": "inline@5"
-        },
-        {
-          "command": "taskHub.run",
-          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.(idle|passed|failed|stopped)$/",
-          "group": "1_run@1"
         },
         {
           "command": "taskHub.stop",
           "when": "view == taskHub.commands && viewItem =~ /^cmd\\.running/",
-          "group": "1_run@2"
+          "group": "inline@6"
         },
         {
           "command": "taskHub.restart",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.running/",
+          "group": "inline@7"
+        },
+        {
+          "command": "taskHub.run",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.(idle|passed|failed|stopped)(\\+|$)/",
+          "group": "1_run@1"
+        },
+        {
+          "command": "taskHub.runWithArgs",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.(idle|passed|failed|stopped)(\\+|$)/ && viewItem =~ /\\+args/",
+          "group": "1_run@2"
+        },
+        {
+          "command": "taskHub.stop",
           "when": "view == taskHub.commands && viewItem =~ /^cmd\\.running/",
           "group": "1_run@3"
         },
         {
-          "command": "taskHub.openUrl",
-          "when": "view == taskHub.commands && viewItem == cmd.running.url",
+          "command": "taskHub.restart",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.running/",
           "group": "1_run@4"
+        },
+        {
+          "command": "taskHub.openUrl",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.running\\.url(\\+|$)/",
+          "group": "1_run@5"
         },
         {
           "command": "taskHub.showOutput",
           "when": "view == taskHub.commands && viewItem =~ /^cmd\\.(running|passed|failed|stopped)/",
-          "group": "1_run@5"
+          "group": "1_run@6"
+        },
+        {
+          "command": "taskHub.serviceLogs",
+          "when": "view == taskHub.commands && viewItem =~ /\\+service/",
+          "group": "2_service@1"
+        },
+        {
+          "command": "taskHub.serviceStop",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.up\\+/",
+          "group": "2_service@2"
         },
         {
           "command": "taskHub.goToDefinition",
-          "when": "view == taskHub.commands && viewItem =~ /^(cmd\\.|group$)/",
-          "group": "2_navigate@1"
+          "when": "view == taskHub.commands && viewItem =~ /^(cmd\\.|group\\.file$)/",
+          "group": "3_navigate@1"
         },
         {
           "command": "taskHub.copyCommand",
           "when": "view == taskHub.commands && viewItem =~ /^cmd\\./",
-          "group": "3_copy@1"
+          "group": "4_copy@1"
+        },
+        {
+          "command": "taskHub.saveAsCommand",
+          "when": "view == taskHub.commands && viewItem =~ /\\+savable/",
+          "group": "4_copy@2"
+        },
+        {
+          "command": "taskHub.deleteSavedCommand",
+          "when": "view == taskHub.commands && viewItem =~ /\\+saved/",
+          "group": "5_saved@1"
         }
       ]
     },
@@ -381,7 +466,7 @@
             "**/*.bat",
             "**/*.cmd"
           ],
-          "description": "Glob patterns of files listed as scripts."
+          "description": "Glob patterns of files listed as scripts. .bat and .cmd files are listed on Windows only."
         },
         "taskHub.scripts.runFrom": {
           "type": "string",
@@ -439,5 +524,8 @@
     "ovsx": "^1.4.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.74.0"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1"
   }
 }

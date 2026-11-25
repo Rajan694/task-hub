@@ -1,0 +1,11 @@
+{
+  // Saved commands for the tests.
+  "commands": [
+    {
+      "id": "say-hi",
+      "label": "Say hi",
+      "command": "node -e \"console.log('hi from saved', process.cwd())\"",
+      "cwd": "apps/web"
+    }
+  ]
+}

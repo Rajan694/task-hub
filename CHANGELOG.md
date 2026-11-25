@@ -17,6 +17,16 @@ Write new entries under **[Unreleased]**. The publish script moves them under th
 - Right-click: **Go to Definition** (opens package.json at the script) and **Copy Command**. Hover shows the full command line, the script, its folder and the last run.
 - The list updates when a `package.json` or lockfile changes. `node_modules`, `taskHub.exclude` (now also `**/.vscode-test/**`) and folders hidden by `files.exclude` are skipped.
 - Restricted Mode: commands are listed but not run.
+- **Makefile** targets (`GNUmakefile`, `makefile`, `Makefile`, whichever make would use), with a `## comment` after the target as its description. Special targets, pattern rules, file targets and assignments are left out.
+- **justfile** recipes, with the comment or `[doc()]` above each as its description; private recipes are left out. Recipe parameters are asked for before a run.
+- **Taskfile** tasks with their `desc`; `internal: true` tasks are left out.
+- **docker compose** services (`compose.yaml`, `compose.yml`, `docker-compose.yaml`, `docker-compose.yml`): Run starts a service with `up -d`; a service that `docker compose ps` reports as running shows *running* with **Logs** and **Stop Service** buttons. The state refreshes after each compose command and every 15 seconds while the view is visible.
+- **VS Code tasks** from `.vscode/tasks.json` (comments allowed; `hide: true` tasks left out). They run through VS Code's own task system and report their exit code.
+- **Scripts** (`taskHub.scripts.include`, at most `taskHub.scripts.maxFiles`): `.sh` / `.bash` with bash (Git Bash on Windows), `.ps1` with `pwsh` (Windows PowerShell on Windows when PowerShell 7 is missing), and `.bat` / `.cmd` on Windows. One heading per folder; each runs in its own folder, or the workspace root with `taskHub.scripts.runFrom`. A row shows *needs bash* or *needs pwsh* when the program is missing.
+- **Script arguments**, shown on each row and asked for before a run: PowerShell `param()` blocks (`Mandatory`, defaults, `[ValidateSet()]` as a pick list, `[switch]`), shell `# Usage:` lines, `getopts` option strings, `case "$1"` branches as a pick list, and the `$1`…`$9` a script reads (named and defaulted from lines like `env=${1:-staging}`). Switches are one multi-select; the last answers are filled in next time. Scripts with nothing known get one optional text box. Arguments are passed as a list, never through a shell string.
+- When PowerShell's execution policy blocks a script, Task Hub offers to run it once with `-ExecutionPolicy Bypass`.
+- **My commands**: saved commands in `.vscode/task-hub.json` (shared with the team), or on this machine only with `taskHub.storage: private`. The **+** button adds one; right-click **Save as Command…** saves any command with its last arguments; **Delete Saved Command** removes one. Edits keep the file's comments.
+- Right-click **Run with Arguments…** adds words after the command line (`-- --watch`). **Restart**, **Run Again** and **Copy Command** reuse the last arguments.
 
 ## [0.1.0] - 2026-11-25
 

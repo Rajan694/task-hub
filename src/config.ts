@@ -6,6 +6,8 @@ export const SECTION = 'taskHub';
 export type RevealTerminal = 'never' | 'onFailure' | 'always';
 export type NotifyLevel = 'failures' | 'all' | 'never';
 export type OpenUrlIn = 'externalBrowser' | 'simpleBrowser';
+export type Storage = 'workspaceFile' | 'private';
+export type ScriptsRunFrom = 'scriptFolder' | 'workspaceRoot';
 
 export interface Settings {
 	sources: readonly SourceKind[];
@@ -15,10 +17,21 @@ export interface Settings {
 	revealTerminal: RevealTerminal;
 	notify: NotifyLevel;
 	openUrlIn: OpenUrlIn;
+	storage: Storage;
+	scriptsInclude: readonly string[];
+	scriptsRunFrom: ScriptsRunFrom;
+	scriptsMaxFiles: number;
 }
 
 /** Settings whose change means the command list has to be detected again. */
-export const RESCAN_SETTINGS = [`${SECTION}.sources`, `${SECTION}.exclude`, `${SECTION}.longRunningNames`, 'files.exclude'];
+export const RESCAN_SETTINGS = [
+	`${SECTION}.sources`,
+	`${SECTION}.exclude`,
+	`${SECTION}.longRunningNames`,
+	`${SECTION}.storage`,
+	`${SECTION}.scripts`,
+	'files.exclude',
+];
 
 export function readSettings(scope?: vscode.ConfigurationScope): Settings {
 	const config = vscode.workspace.getConfiguration(SECTION, scope);
@@ -35,5 +48,9 @@ export function readSettings(scope?: vscode.ConfigurationScope): Settings {
 		revealTerminal: config.get<RevealTerminal>('revealTerminal', 'onFailure'),
 		notify: config.get<NotifyLevel>('notify', 'failures'),
 		openUrlIn: config.get<OpenUrlIn>('openUrlIn', 'externalBrowser'),
+		storage: config.get<Storage>('storage', 'workspaceFile'),
+		scriptsInclude: config.get<string[]>('scripts.include', []),
+		scriptsRunFrom: config.get<ScriptsRunFrom>('scripts.runFrom', 'scriptFolder'),
+		scriptsMaxFiles: config.get<number>('scripts.maxFiles', 200),
 	};
 }

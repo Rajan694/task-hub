@@ -4,7 +4,7 @@
 
 **Every command your project can run, one click away.** Task Hub is a sidebar that finds the scripts, targets and services in your workspace (npm, Makefile, docker-compose, Maven, Gradle, shell and PowerShell scripts, VS Code tasks and more) and runs them without opening or typing into a terminal.
 
-> **Status: early development.** npm, pnpm, yarn and bun scripts work today (milestone 0.1); the other sources arrive by milestone (see [Roadmap](#roadmap)). The full design is in [docs/DESIGN.md](docs/DESIGN.md).
+> **Status: early development.** npm-family scripts, Makefile, justfile, Taskfile, docker compose, VS Code tasks, scripts and saved commands work today (milestones 0.1 and 0.2); Python, Maven, Gradle and groups arrive next (see [Roadmap](#roadmap)). The full design is in [docs/DESIGN.md](docs/DESIGN.md).
 
 ## Features
 
@@ -41,8 +41,24 @@ Open the **Task Hub** icon in the activity bar. Each `package.json` with scripts
 | ✓ `passed · 3.2s` | Exited with code 0 | Run |
 | ✗ `failed (exit 1)` | Exited with an error | Run, Show Output |
 | ■ `stopped` | Stopped by you | Run |
+| ▣ `running` (compose) | The service is up, whoever started it | Logs, Stop Service |
+| ⚠ `needs bash` | The program the script needs isn't installed | — |
 
-Clicking a row only selects it; nothing runs until you click ▶. Right-click a row for **Show Output**, **Go to Definition** and **Copy Command**. Output stays out of the way: a terminal opens only when you ask for it or a command fails.
+Clicking a row only selects it; nothing runs until you click ▶. Right-click a row for **Run with Arguments…**, **Show Output**, **Go to Definition**, **Copy Command** and **Save as Command…**. Output stays out of the way: a terminal opens only when you ask for it or a command fails.
+
+**Scripts that take arguments** show what they take on their row (`env (staging, prod) [--dry-run]`), and ▶ asks for each value first: a pick list when the choices are known, a text box otherwise, filled with what you used last. Task Hub reads PowerShell `param()` blocks, and in shell scripts a `# Usage:` line, `getopts`, `case "$1"` and the `$1`…`$9` the script uses. Press Escape to cancel.
+
+**Saved commands** go in `.vscode/task-hub.json`, so you can commit them for your team:
+
+```jsonc
+{
+  "commands": [
+    { "id": "django", "label": "Django server", "command": "python manage.py runserver", "cwd": "backend", "longRunning": true }
+  ]
+}
+```
+
+Add one with **+** in the view's title bar, or right-click any command → **Save as Command…** to keep it with its arguments (e.g. *Deploy to staging*). Set `taskHub.storage` to `private` to keep them on your machine instead.
 
 ## Extension Settings
 

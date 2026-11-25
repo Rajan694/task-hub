@@ -119,8 +119,7 @@ export class CommandRegistry implements vscode.Disposable {
 							...(await detector.detect({
 								folder,
 								multiRoot,
-								exclude: settings.exclude,
-								longRunningNames: settings.longRunningNames,
+								settings,
 								token: tokenSource.token,
 								log: this.log,
 							})),

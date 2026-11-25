@@ -1,0 +1,166 @@
+import * as fs from 'fs';
+import { applyEdits, findNodeAtLocation, modify, parse, parseTree, type ParseError } from 'jsonc-parser';
+import * as vscode from 'vscode';
+import { readSettings } from './config';
+import { positionAt } from './detectors/common';
+
+/** One entry of `commands` in .vscode/task-hub.json. */
+export interface SavedCommand {
+	id: string;
+	label: string;
+	command: string;
+	/** Relative to the workspace folder; the folder itself when absent. */
+	cwd?: string;
+	longRunning?: boolean;
+	readyPattern?: string;
+}
+
+export interface SavedList {
+	commands: (SavedCommand & { line?: number })[];
+	/** The file they come from; undefined for private storage. */
+	file?: vscode.Uri;
+}
+
+const PRIVATE_KEY = 'taskHub.savedCommands';
+const FORMAT = { formattingOptions: { insertSpaces: true, tabSize: 2, eol: '\n' } };
+
+/**
+ * Saved commands, per workspace folder: in `.vscode/task-hub.json` so a team can commit and
+ * share them (the default), or in VS Code's workspace state with `taskHub.storage: private`.
+ * Edits to the file keep its comments and formatting.
+ */
+export class SavedStore implements vscode.Disposable {
+	private readonly changed = new vscode.EventEmitter<void>();
+	readonly onDidChange = this.changed.event;
+
+	constructor(private readonly state: vscode.Memento) {}
+
+	static fileOf(folder: vscode.WorkspaceFolder): vscode.Uri {
+		return vscode.Uri.joinPath(folder.uri, '.vscode', 'task-hub.json');
+	}
+
+	isPrivate(folder: vscode.WorkspaceFolder): boolean {
+		return readSettings(folder.uri).storage === 'private';
+	}
+
+	async list(folder: vscode.WorkspaceFolder): Promise<SavedList> {
+		if (this.isPrivate(folder)) {
+			return { commands: this.privateCommands(folder) };
+		}
+		const file = SavedStore.fileOf(folder);
+		const text = await readFile(file);
+		if (text === undefined) {
+			return { commands: [], file };
+		}
+		const errors: ParseError[] = [];
+		const json = parse(text, errors, { allowTrailingComma: true }) as { commands?: unknown } | undefined;
+		const tree = parseTree(text, [], { allowTrailingComma: true });
+		const commands: SavedList['commands'] = [];
+		const entries = Array.isArray(json?.commands) ? json.commands : [];
+		entries.forEach((entry: unknown, index: number) => {
+			const saved = validate(entry);
+			if (saved) {
+				const node = tree && findNodeAtLocation(tree, ['commands', index]);
+				commands.push({ ...saved, line: node ? positionAt(text, node.offset).line : undefined });
+			}
+		});
+		return { commands, file };
+	}
+
+	/** Saves a new command and returns it with its id (made from the label, unique in the folder). */
+	async add(folder: vscode.WorkspaceFolder, command: Omit<SavedCommand, 'id'>): Promise<SavedCommand> {
+		const existing = new Set((await this.list(folder)).commands.map((c) => c.id));
+		const base =
+			command.label
+				.toLowerCase()
+				.replace(/[^a-z0-9]+/g, '-')
+				.replace(/^-+|-+$/g, '')
+				.slice(0, 40) || 'command';
+		let id = base;
+		for (let n = 2; existing.has(id); n++) {
+			id = `${base}-${n}`;
+		}
+		const saved: SavedCommand = { id, ...withoutEmpty(command) };
+
+		if (this.isPrivate(folder)) {
+			await this.state.update(this.privateKey(folder), [...this.privateCommands(folder), saved]);
+		} else {
+			const file = SavedStore.fileOf(folder);
+			let text = (await readFile(file)) ?? '{\n  "commands": []\n}\n';
+			const tree = parseTree(text, [], { allowTrailingComma: true });
+			const list = tree && findNodeAtLocation(tree, ['commands']);
+			text =
+				list?.type === 'array'
+					? applyEdits(text, modify(text, ['commands', -1], saved, { ...FORMAT, isArrayInsertion: true }))
+					: applyEdits(text, modify(text, ['commands'], [saved], FORMAT));
+			await fs.promises.mkdir(vscode.Uri.joinPath(folder.uri, '.vscode').fsPath, { recursive: true });
+			await fs.promises.writeFile(file.fsPath, text);
+		}
+		this.changed.fire();
+		return saved;
+	}
+
+	async remove(folder: vscode.WorkspaceFolder, id: string): Promise<void> {
+		if (this.isPrivate(folder)) {
+			await this.state.update(
+				this.privateKey(folder),
+				this.privateCommands(folder).filter((c) => c.id !== id),
+			);
+		} else {
+			const file = SavedStore.fileOf(folder);
+			const text = await readFile(file);
+			const json = text === undefined ? undefined : (parse(text, [], { allowTrailingComma: true }) as { commands?: unknown });
+			const index = Array.isArray(json?.commands) ? json.commands.findIndex((c: unknown) => validate(c)?.id === id) : -1;
+			if (text === undefined || index < 0) {
+				return;
+			}
+			await fs.promises.writeFile(file.fsPath, applyEdits(text, modify(text, ['commands', index], undefined, FORMAT)));
+		}
+		this.changed.fire();
+	}
+
+	private privateKey(folder: vscode.WorkspaceFolder): string {
+		return `${PRIVATE_KEY}:${folder.uri.toString()}`;
+	}
+
+	private privateCommands(folder: vscode.WorkspaceFolder): SavedCommand[] {
+		const value = this.state.get<unknown[]>(this.privateKey(folder), []);
+		return value.map(validate).filter((c): c is SavedCommand => c !== undefined);
+	}
+
+	dispose(): void {
+		this.changed.dispose();
+	}
+}
+
+/** A saved command with the fields it needs, or undefined. A missing id falls back to the label. */
+function validate(entry: unknown): SavedCommand | undefined {
+	if (!entry || typeof entry !== 'object') {
+		return undefined;
+	}
+	const e = entry as Record<string, unknown>;
+	if (typeof e.command !== 'string' || !e.command.trim()) {
+		return undefined;
+	}
+	const label = typeof e.label === 'string' && e.label.trim() ? e.label : e.command;
+	return {
+		id: typeof e.id === 'string' && e.id ? e.id : label,
+		label,
+		command: e.command,
+		cwd: typeof e.cwd === 'string' && e.cwd ? e.cwd : undefined,
+		longRunning: typeof e.longRunning === 'boolean' ? e.longRunning : undefined,
+		readyPattern: typeof e.readyPattern === 'string' && e.readyPattern ? e.readyPattern : undefined,
+	};
+}
+
+function withoutEmpty<T extends object>(value: T): T {
+	return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined && v !== '')) as T;
+}
+
+async function readFile(file: vscode.Uri): Promise<string | undefined> {
+	try {
+		return await fs.promises.readFile(file.fsPath, 'utf8');
+	} catch {
+		return undefined;
+	}
+}

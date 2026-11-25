@@ -1,8 +1,9 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { failureReason, formatAgo, formatDuration, statusText } from '../format';
-import type { CommandGroup, HubCommand, RunState, RunStatus, SourceKind } from '../model';
+import type { CommandGroup, HubCommand, RunState, SourceKind } from '../model';
 import type { CommandRegistry } from '../registry';
+import type { ServiceMonitor } from '../services';
 import type { RunStateStore } from '../state';
 
 export interface GroupNode {
@@ -21,11 +22,21 @@ export interface CommandNode {
 
 export type TreeNode = GroupNode | CommandNode;
 
-const GROUP_ICONS: Partial<Record<SourceKind, string>> = {
+const GROUP_ICONS: Record<SourceKind, string> = {
 	npm: 'package',
+	make: 'tools',
+	just: 'checklist',
+	taskfile: 'tasklist',
+	compose: 'server',
+	vscode: 'vscode',
+	saved: 'bookmark',
+	python: 'symbol-namespace',
+	script: 'terminal',
+	maven: 'symbol-package',
+	gradle: 'symbol-package',
 };
 
-/** The Commands view: one heading per package.json (and later Makefile, compose file, …), one row per command. */
+/** The Commands view: one heading per package.json, Makefile, compose file, script folder…; one row per command. */
 export class CommandsTreeProvider implements vscode.TreeDataProvider<TreeNode>, vscode.Disposable {
 	private roots: GroupNode[] = [];
 	private byKey = new Map<string, CommandNode>();
@@ -36,6 +47,7 @@ export class CommandsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
 	constructor(
 		private readonly registry: CommandRegistry,
 		private readonly states: RunStateStore,
+		private readonly services: ServiceMonitor,
 	) {
 		this.rebuild();
 		this.disposables = [
@@ -48,6 +60,13 @@ export class CommandsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
 				const node = this.byKey.get(key);
 				if (node) {
 					this.changed.fire(node);
+				}
+			}),
+			services.onDidChange(() => {
+				for (const node of this.byKey.values()) {
+					if (node.command.service) {
+						this.changed.fire(node);
+					}
 				}
 			}),
 		];
@@ -75,24 +94,24 @@ export class CommandsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
 			item.id = `group:${node.folder.uri.toString()}#${node.group.id}`;
 			item.description = node.group.description;
 			item.tooltip = node.group.tooltip;
-			item.iconPath = new vscode.ThemeIcon(GROUP_ICONS[node.source] ?? 'folder');
-			item.contextValue = 'group';
+			item.iconPath = new vscode.ThemeIcon(GROUP_ICONS[node.source]);
+			item.contextValue = node.group.definedAt ? 'group.file' : 'group';
 			return item;
 		}
 		const { command } = node;
-		const state = this.states.get(command.key);
+		const row = rowState(command, this.states.get(command.key), this.services.isRunning(command.key));
 		const item = new vscode.TreeItem(command.label, vscode.TreeItemCollapsibleState.None);
 		item.id = command.key;
-		item.description = statusText(state);
-		item.iconPath = statusIcon(state.status);
-		item.contextValue = contextValue(state);
+		item.description = row.text;
+		item.iconPath = row.icon;
+		item.contextValue = row.contextValue;
 		// The tooltip is built on hover (resolveTreeItem), so "12s ago" is current.
 		return item;
 	}
 
 	resolveTreeItem(item: vscode.TreeItem, node: TreeNode): vscode.TreeItem {
 		if (node.kind === 'command') {
-			item.tooltip = commandTooltip(node.command, this.states.get(node.command.key));
+			item.tooltip = commandTooltip(node.command, this.states.get(node.command.key), this.services.isRunning(node.command.key));
 		}
 		return item;
 	}
@@ -120,10 +139,38 @@ export class CommandsTreeProvider implements vscode.TreeDataProvider<TreeNode>, 
 	}
 }
 
+interface RowState {
+	text: string;
+	icon: vscode.ThemeIcon;
+	contextValue: string;
+}
+
+/**
+ * What a row shows. A compose service that docker reports as running shows "running" even
+ * when Task Hub didn't start it; one that isn't running shows as idle unless its last start failed.
+ */
+export function rowState(command: HubCommand, state: RunState, serviceUp = false): RowState {
+	const flags = rowFlags(command);
+	if (command.service && state.status !== 'running' && state.status !== 'ready' && state.status !== 'failed') {
+		return serviceUp
+			? { text: 'running', icon: new vscode.ThemeIcon('vm-running', new vscode.ThemeColor('testing.iconPassed')), contextValue: `cmd.up${flags}` }
+			: { text: command.description ?? '', icon: new vscode.ThemeIcon('circle-outline'), contextValue: `cmd.idle${flags}` };
+	}
+	if (state.status === 'idle' && command.unavailable) {
+		return { text: command.unavailable, icon: new vscode.ThemeIcon('warning', new vscode.ThemeColor('problemsWarningIcon.foreground')), contextValue: `cmd.idle${flags}` };
+	}
+	return {
+		text: state.status === 'idle' ? (command.description ?? '') : statusText(state),
+		icon: statusIcon(state),
+		contextValue: contextValue(state) + flags,
+	};
+}
+
 /**
  * The row's context value, which decides its buttons (see `menus` in package.json):
- * `cmd.idle`, `cmd.passed`, `cmd.failed`, `cmd.stopped`, `cmd.running`, and
- * `cmd.running.url` once a dev-server URL was found.
+ * `cmd.idle`, `cmd.passed`, `cmd.failed`, `cmd.stopped`, `cmd.running`, `cmd.running.url`
+ * once a dev-server URL was found, and `cmd.up` for a running compose service.
+ * Flags follow: `+args` (Run with Arguments…), `+savable`, `+saved`, `+service`.
  */
 export function contextValue(state: RunState): string {
 	switch (state.status) {
@@ -136,8 +183,24 @@ export function contextValue(state: RunState): string {
 	}
 }
 
-function statusIcon(status: RunStatus): vscode.ThemeIcon {
-	switch (status) {
+function rowFlags(command: HubCommand): string {
+	const flags: string[] = [];
+	if (command.acceptsArgs) {
+		flags.push('args');
+	}
+	if (command.savedId) {
+		flags.push('saved');
+	} else if (command.acceptsArgs) {
+		flags.push('savable');
+	}
+	if (command.service) {
+		flags.push('service');
+	}
+	return flags.map((f) => `+${f}`).join('');
+}
+
+function statusIcon(state: RunState): vscode.ThemeIcon {
+	switch (state.status) {
 		case 'idle':
 			return new vscode.ThemeIcon('circle-outline');
 		case 'running':
@@ -152,21 +215,33 @@ function statusIcon(status: RunStatus): vscode.ThemeIcon {
 	}
 }
 
-function commandTooltip(command: HubCommand, state: RunState): vscode.MarkdownString {
+function commandTooltip(command: HubCommand, state: RunState, serviceUp: boolean): vscode.MarkdownString {
 	const md = new vscode.MarkdownString();
 	md.appendMarkdown(`**${escape(command.label)}**`);
 	if (command.longRunning) {
 		md.appendMarkdown(' · long-running');
 	}
 	md.appendMarkdown('\n\n');
-	md.appendCodeblock(command.commandLine, 'shellscript');
-	if (command.description && command.description !== command.commandLine) {
-		md.appendMarkdown(`Script: \`${command.description.replace(/`/g, "'")}\`\n\n`);
+	md.appendCodeblock(command.commandLine, command.vscodeTask ? 'plaintext' : 'shellscript');
+	if (command.body && command.body !== command.commandLine) {
+		md.appendMarkdown(`Script: \`${command.body.replace(/`/g, "'")}\`\n\n`);
+	}
+	if (command.description) {
+		md.appendText(`${command.args?.length ? 'Takes: ' : ''}${command.description}`);
+		md.appendMarkdown('\n\n');
+	}
+	if (command.unavailable) {
+		md.appendText(`Can't run here: ${command.unavailable}.`);
+		md.appendMarkdown('\n\n');
 	}
 	const relative = path.relative(command.folder.uri.fsPath, command.cwd.fsPath).split(path.sep).join('/');
-	md.appendMarkdown(`Runs in: \`${command.folder.name}${relative ? `/${relative}` : ''}\`\n\n`);
+	md.appendMarkdown(`Runs in: \`${command.folder.name}${relative ? `/${relative}` : ''}\`${command.vscodeTask ? ' (by VS Code)' : ''}\n\n`);
 
 	const now = Date.now();
+	if (command.service && serviceUp) {
+		md.appendMarkdown('The service is running (docker compose ps).');
+		return md;
+	}
 	switch (state.status) {
 		case 'idle':
 			md.appendMarkdown('Not run yet.');
@@ -180,7 +255,7 @@ function commandTooltip(command: HubCommand, state: RunState): vscode.MarkdownSt
 			break;
 		default: {
 			const outcome =
-				state.status === 'passed' ? 'Passed (exit 0)' : state.status === 'stopped' ? 'Stopped' : `Failed (${failureReason(state)})`;
+				state.status === 'passed' ? `Passed${state.exitCode === 0 ? ' (exit 0)' : ''}` : state.status === 'stopped' ? 'Stopped' : `Failed (${failureReason(state)})`;
 			md.appendMarkdown(`${outcome} ${formatAgo(now - (state.endedAt ?? now))}`);
 			if (state.startedAt !== undefined && state.endedAt !== undefined) {
 				md.appendMarkdown(`, took ${formatDuration(state.endedAt - state.startedAt)}`);

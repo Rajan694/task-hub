@@ -1,0 +1,15 @@
+version: '3'
+
+tasks:
+  build:
+    desc: Build everything
+    cmds:
+      - echo build
+  db:migrate:
+    desc: "Run migrations"
+    cmds:
+      - echo migrate
+  setup:
+    internal: true
+    cmds:
+      - echo setup

@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import type { CommandDetector, CommandGroup, DetectContext, HubCommand } from '../model';
 import { quoteArg } from '../shell';
-import { excludeGlob, groupLabel, isLongRunning, positionAt, relativeDir } from './common';
+import { findInFolder, groupLabel, isLongRunning, makeCommand, positionAt, relativeDir } from './common';
 
 export type PackageManager = 'npm' | 'pnpm' | 'yarn' | 'bun';
 
@@ -125,12 +125,7 @@ export const npmDetector: CommandDetector = {
 	watchGlob: `**/{package.json,${LOCKFILES.map(([file]) => file).join(',')}}`,
 
 	async detect(context: DetectContext): Promise<HubCommand[]> {
-		const files = await vscode.workspace.findFiles(
-			new vscode.RelativePattern(context.folder, '**/package.json'),
-			excludeGlob(['**/node_modules/**', ...context.exclude]),
-			MAX_PACKAGES,
-			context.token,
-		);
+		const files = await findInFolder(context, '**/package.json', MAX_PACKAGES);
 		const packages = files
 			.map((uri) => ({ uri, relative: relativeDir(context, path.dirname(uri.fsPath)) }))
 			.sort((a, b) => (a.relative === '' ? -1 : b.relative === '' ? 1 : a.relative.localeCompare(b.relative)));
@@ -164,20 +159,19 @@ export const npmDetector: CommandDetector = {
 				definedAt: uri,
 			};
 			for (const script of scripts) {
-				const id = `npm:${packageId}:${script.name}`;
-				commands.push({
-					key: `${context.folder.uri.toString()}#${id}`,
-					id,
-					label: script.name,
-					source: 'npm',
-					group,
-					folder: context.folder,
-					cwd: vscode.Uri.file(dir),
-					commandLine: runLine(manager, script.name),
-					definedAt: new vscode.Location(uri, new vscode.Position(script.line, script.character)),
-					description: script.body,
-					longRunning: isLongRunning(script.name, context.longRunningNames),
-				});
+				commands.push(
+					makeCommand(context, {
+						id: `npm:${packageId}:${script.name}`,
+						label: script.name,
+						source: 'npm',
+						group,
+						cwd: vscode.Uri.file(dir),
+						commandLine: runLine(manager, script.name),
+						definedAt: new vscode.Location(uri, new vscode.Position(script.line, script.character)),
+						body: script.body,
+						longRunning: isLongRunning(script.name, context.settings.longRunningNames),
+					}),
+				);
 			}
 		}
 		return commands;

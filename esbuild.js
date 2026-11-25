@@ -39,6 +39,8 @@ async function main() {
 		target: 'node20',
 		outfile: 'dist/extension.js',
 		external: ['vscode'],
+		// Prefer ES modules: jsonc-parser's default UMD build loads its parts with a require() esbuild can't follow.
+		mainFields: ['module', 'main'],
 		logLevel: 'silent',
 		plugins: [problemMatcherPlugin],
 	});

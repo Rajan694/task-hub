@@ -1,0 +1,14 @@
+# Start the dev server
+dev:
+    echo dev
+
+# Deploy to an environment
+deploy env target='web' +flags='':
+    echo deploying {{env}} {{target}} {{flags}}
+
+_helper:
+    echo hidden
+
+[private]
+secret:
+    echo hidden
