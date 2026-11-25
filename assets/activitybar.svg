@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <!-- Task Hub: a list of commands, the first one playing. Monochrome; VS Code masks it with the theme color. -->
+  <path d="M4.2 3.9 9.2 6.5 4.2 9.1Z" fill="#000" stroke="#000" stroke-width="1.2" stroke-linejoin="round"/>
+  <rect x="11.5" y="5.5" width="9.5" height="2" rx="1" fill="#000"/>
+  <circle cx="6.5" cy="12.25" r="1.7" fill="#000"/>
+  <rect x="11.5" y="11.25" width="9.5" height="2" rx="1" fill="#000"/>
+  <circle cx="6.5" cy="18" r="1.7" fill="#000"/>
+  <rect x="11.5" y="17" width="6.5" height="2" rx="1" fill="#000"/>
+</svg>

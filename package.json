@@ -1,0 +1,367 @@
+{
+  "name": "task-hub",
+  "displayName": "Task Hub",
+  "description": "Finds every command your project can run (npm scripts, Makefile, docker-compose, Maven, Gradle, shell and PowerShell scripts, VS Code tasks) and runs it with one click, with live status, stop, restart and port links.",
+  "icon": "assets/icon.png",
+  "publisher": "rajan694",
+  "version": "0.0.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Rajan694/task-hub.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Rajan694/task-hub/issues"
+  },
+  "homepage": "https://github.com/Rajan694/task-hub#readme",
+  "engines": {
+    "vscode": "^1.102.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "tasks",
+    "npm scripts",
+    "task runner",
+    "makefile",
+    "docker compose",
+    "maven",
+    "gradle",
+    "scripts"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In Restricted Mode, Task Hub lists commands but does not run them, because running project scripts executes code from the repository."
+    }
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "taskHub",
+          "title": "Task Hub",
+          "icon": "assets/activitybar.svg"
+        }
+      ]
+    },
+    "views": {
+      "taskHub": [
+        {
+          "id": "taskHub.commands",
+          "name": "Commands"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "taskHub.commands",
+        "contents": "Open a folder to see the commands it can run.\n[Open Folder](command:vscode.openFolder)",
+        "when": "workbenchState == empty"
+      },
+      {
+        "view": "taskHub.commands",
+        "contents": "No runnable commands found in this workspace yet.\n[Refresh](command:taskHub.refresh)",
+        "when": "workbenchState != empty"
+      }
+    ],
+    "commands": [
+      {
+        "command": "taskHub.run",
+        "title": "Run",
+        "category": "Task Hub",
+        "icon": "$(play)"
+      },
+      {
+        "command": "taskHub.stop",
+        "title": "Stop",
+        "category": "Task Hub",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "taskHub.restart",
+        "title": "Restart",
+        "category": "Task Hub",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "taskHub.openUrl",
+        "title": "Open in Browser",
+        "category": "Task Hub",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "taskHub.showOutput",
+        "title": "Show Output",
+        "category": "Task Hub",
+        "icon": "$(output)"
+      },
+      {
+        "command": "taskHub.addCommand",
+        "title": "Add Command",
+        "category": "Task Hub",
+        "icon": "$(add)"
+      },
+      {
+        "command": "taskHub.refresh",
+        "title": "Refresh",
+        "category": "Task Hub",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "taskHub.quickRun",
+        "title": "Run Command…",
+        "category": "Task Hub"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "taskHub.run",
+          "when": "false"
+        },
+        {
+          "command": "taskHub.stop",
+          "when": "false"
+        },
+        {
+          "command": "taskHub.restart",
+          "when": "false"
+        },
+        {
+          "command": "taskHub.openUrl",
+          "when": "false"
+        },
+        {
+          "command": "taskHub.showOutput",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "taskHub.refresh",
+          "when": "view == taskHub.commands",
+          "group": "navigation"
+        },
+        {
+          "command": "taskHub.addCommand",
+          "when": "view == taskHub.commands",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "taskHub.run",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.(idle|passed|failed|stopped)/",
+          "group": "inline"
+        },
+        {
+          "command": "taskHub.openUrl",
+          "when": "view == taskHub.commands && viewItem == cmd.running.url",
+          "group": "inline"
+        },
+        {
+          "command": "taskHub.stop",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.running/",
+          "group": "inline"
+        },
+        {
+          "command": "taskHub.restart",
+          "when": "view == taskHub.commands && viewItem =~ /^cmd\\.running/",
+          "group": "inline"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Task Hub",
+      "properties": {
+        "taskHub.sources": {
+          "type": "array",
+          "description": "Which command sources are detected.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "npm",
+              "make",
+              "just",
+              "taskfile",
+              "compose",
+              "vscode",
+              "saved",
+              "python",
+              "script",
+              "maven",
+              "gradle"
+            ]
+          },
+          "uniqueItems": true,
+          "default": [
+            "npm",
+            "make",
+            "just",
+            "taskfile",
+            "compose",
+            "vscode",
+            "saved",
+            "python",
+            "script",
+            "maven",
+            "gradle"
+          ]
+        },
+        "taskHub.exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/node_modules/**",
+            "**/.venv/**",
+            "**/dist/**",
+            "**/target/**",
+            "**/build/**"
+          ],
+          "description": "Glob patterns of folders that are never scanned."
+        },
+        "taskHub.longRunningNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "dev",
+            "start",
+            "serve",
+            "watch",
+            "run",
+            "bootRun",
+            "spring-boot:run"
+          ],
+          "description": "Command names treated as long-running: Task Hub watches them for a port and offers restart."
+        },
+        "taskHub.revealTerminal": {
+          "type": "string",
+          "enum": [
+            "never",
+            "onFailure",
+            "always"
+          ],
+          "default": "onFailure",
+          "description": "When to show a command's terminal."
+        },
+        "taskHub.notify": {
+          "type": "string",
+          "enum": [
+            "failures",
+            "all",
+            "never"
+          ],
+          "default": "failures",
+          "description": "Which finished commands show a notification."
+        },
+        "taskHub.openUrlIn": {
+          "type": "string",
+          "enum": [
+            "externalBrowser",
+            "simpleBrowser"
+          ],
+          "enumDescriptions": [
+            "Your default browser.",
+            "VS Code's built-in Simple Browser."
+          ],
+          "default": "externalBrowser",
+          "description": "Where the Open in Browser button opens a dev-server URL."
+        },
+        "taskHub.storage": {
+          "type": "string",
+          "enum": [
+            "workspaceFile",
+            "private"
+          ],
+          "enumDescriptions": [
+            "Save commands, groups and favorites in .vscode/task-hub.json, so the team can commit and share them.",
+            "Save them in VS Code's workspace state, only on this machine."
+          ],
+          "default": "workspaceFile",
+          "description": "Where saved commands, groups and favorites are stored."
+        },
+        "taskHub.scripts.include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "**/*.sh",
+            "**/*.bash",
+            "**/*.ps1",
+            "**/*.bat",
+            "**/*.cmd"
+          ],
+          "description": "Glob patterns of files listed as scripts."
+        },
+        "taskHub.scripts.runFrom": {
+          "type": "string",
+          "enum": [
+            "scriptFolder",
+            "workspaceRoot"
+          ],
+          "default": "scriptFolder",
+          "description": "Folder a script runs in."
+        },
+        "taskHub.scripts.maxFiles": {
+          "type": "number",
+          "default": 200,
+          "minimum": 1,
+          "description": "Stop listing scripts after this many, so big repositories stay fast."
+        },
+        "taskHub.gradle.defaultTasks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "build",
+            "test",
+            "clean",
+            "assemble"
+          ],
+          "description": "Gradle tasks shown before Load all tasks."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch:esbuild": "node esbuild.js --watch",
+    "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "compile-tests": "tsc -p . --outDir out",
+    "watch-tests": "tsc -p . -w --outDir out",
+    "pretest": "npm run compile-tests && npm run compile",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^22.20.5",
+    "@types/vscode": "~1.102.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^4.1.1",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.15.0",
+    "ovsx": "^1.4.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.74.0"
+  }
+}
