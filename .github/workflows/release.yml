@@ -5,7 +5,9 @@
 # One-time setup (details in RELEASING.md):
 #   - VS Code Marketplace: add a Trusted Publishing policy for this repository and
 #     the workflow file "release.yml" at https://marketplace.visualstudio.com/manage
-#   - Open VSX: add the repository secret OVSX_PAT (Settings > Secrets and variables > Actions)
+#   - Open VSX: add the repository secret OVSX_PAT for the first release. Afterwards register
+#     a trusted publisher at https://open-vsx.org/user-settings/trusted-publishers and delete
+#     the secret (a token always takes precedence over trusted publishing).
 name: Release
 
 on:
@@ -35,7 +37,7 @@ on:
 
 permissions:
   contents: write   # push the release commit and tag, create the GitHub release
-  id-token: write   # trusted publishing (OIDC) to the VS Code Marketplace
+  id-token: write   # trusted publishing (OIDC) to the VS Code Marketplace and Open VSX
 
 concurrency:
   group: release
@@ -68,6 +70,7 @@ jobs:
           MARKETPLACE_TARGET: ${{ inputs.marketplace }}
           OPENVSX_TARGET: ${{ inputs.openvsx }}
           # Marketplace uses trusted publishing (OIDC), so no VSCE_PAT here.
+          # Open VSX uses OVSX_PAT while the secret exists, otherwise trusted publishing.
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
           GH_TOKEN: ${{ github.token }}
         run: |

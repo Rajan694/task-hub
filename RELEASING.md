@@ -111,19 +111,42 @@ From then on, publish with the **Release** workflow (next section). The workflow
 
 ### 3. Open VSX
 
-1. Sign in at <https://open-vsx.org> with GitHub, then in your profile settings link an Eclipse account and sign the **Publisher Agreement**.
-2. Create an access token at <https://open-vsx.org/user-settings/tokens>.
-3. Create the `rajan694` namespace once:
+Open VSX supports trusted publishing too, with two conditions: the extension must already exist on Open VSX, and only an **owner** of the namespace can register a trusted publisher. So the first version goes out with an access token, and you switch afterwards.
+
+**First release, with an access token**
+
+1. Create an Eclipse account at <https://accounts.eclipse.org/user/register>, with your GitHub username in the *GitHub Username* field.
+2. Sign in at <https://open-vsx.org> with the same GitHub account, link the Eclipse account on your profile page and sign the **Publisher Agreement**.
+3. Create an access token at <https://open-vsx.org/user-settings/tokens>.
+4. Create the `rajan694` namespace once (it holds all your extensions). Use exactly `rajan694`, lowercase: trusted publishing compares it case-sensitively with `publisher` in `package.json`.
 
    ```bash
    npx ovsx create-namespace rajan694 -p <token>
    ```
 
-4. Store the token as `OVSX_PAT` locally (step 4) and as a repository secret for the Release workflow:
+5. Store the token as a repository secret for the Release workflow, and in `.env` for local publishing (step 4):
 
    ```bash
    gh secret set OVSX_PAT
    ```
+
+6. Publish the first version with the Release workflow.
+
+**Then switch to trusted publishing**
+
+7. Claim ownership of the namespace: open a *Claim namespace ownership* issue at <https://github.com/EclipseFdn/open-vsx.org/issues/new/choose>. Creating a namespace only makes you a contributor. Ownership also shows your extensions as verified instead of with a warning icon.
+8. Once you are an owner, open <https://open-vsx.org/user-settings/trusted-publishers>, choose namespace `rajan694`, extension `task-hub` and provider **GitHub Actions**, and fill in:
+   - Organization or User name: `Rajan694`
+   - Repository name: `task-hub`
+   - Workflow filename: `release.yml`
+   - Environment name: leave empty
+9. Delete the secret, because an access token always takes precedence over trusted publishing:
+
+   ```bash
+   gh secret delete OVSX_PAT
+   ```
+
+From then on the Release workflow publishes to Open VSX with a short-lived token that `ovsx` gets in exchange for GitHub's OIDC token (the workflow already has `id-token: write`). Publishing from your own machine still needs `OVSX_PAT` in `.env`. If the workflow fails with *No trusted publisher matches the presented token*, check the names in the registration: they are compared exactly, including case.
 
 ### 4. Local tokens
 
