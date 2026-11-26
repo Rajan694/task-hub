@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { HubCommand, ScriptArg } from '../model';
 import { splitArgs } from '../shell';
+import { splitAlternatives } from './usage';
 
 /** The answers given for each argument, by argument name; switches are true or false. */
 export type ArgValues = Record<string, string | boolean>;
@@ -99,8 +100,9 @@ async function askStructured(command: HubCommand, args: readonly ScriptArg[], me
 }
 
 /**
- * The argument list from the answers, in the order the script declares them: `flag value` or
- * a bare `flag` for options and switches, values for positional arguments. An empty positional
+ * The argument list from the answers, in the order the script declares them: `flag value`,
+ * `flag=value` or a bare `flag` for options and switches, values for positional arguments, and
+ * raw answers word by word as typed. An empty positional
  * value is left out, unless a later one is given, which keeps the positions right.
  */
 export function buildArgv(args: readonly ScriptArg[], values: ArgValues): string[] {
@@ -115,10 +117,14 @@ export function buildArgv(args: readonly ScriptArg[], values: ArgValues): string
 			continue;
 		}
 		const text = typeof value === 'string' ? value : '';
+		if (arg.raw) {
+			argv.push(...splitArgs(text));
+			continue;
+		}
 		const words = arg.variadic ? splitArgs(text) : text ? [text] : [];
 		if (arg.flag) {
 			if (words.length) {
-				argv.push(arg.flag, ...words);
+				argv.push(...(arg.joined ? [`${arg.flag}=${words.join(' ')}`] : [arg.flag, ...words]));
 			}
 			continue;
 		}
@@ -139,7 +145,14 @@ function askText(title: string, arg: ScriptArg, previous: string | undefined): T
 		title,
 		prompt: arg.required ? arg.name : `${arg.name} (optional)`,
 		value: previous ?? '',
-		placeHolder: arg.defaultValue !== undefined ? `default: ${arg.defaultValue}` : arg.variadic ? 'one or more values, separated by spaces' : undefined,
+		placeHolder:
+			arg.defaultValue !== undefined
+				? `default: ${arg.defaultValue}`
+				: arg.raw
+					? `as typed, e.g. ${splitAlternatives(arg.name).join(' or ')}`
+					: arg.variadic
+						? 'one or more values, separated by spaces'
+						: undefined,
 		ignoreFocusOut: true,
 		validateInput: (value) => (arg.required && !value.trim() ? `${arg.name} is required` : undefined),
 	});

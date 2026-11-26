@@ -13,7 +13,7 @@
 - **One click to run, stop or restart.** Each command runs in its own folder. Stop ends the whole process tree, so dev servers really stop.
 - **Live status**: running, ready, passed, failed (with the exit code), stopped, and how long it took. It survives a window reload.
 - **Dev-server links.** A local URL in the output (`http://localhost:5173/`) shows as `:5173` with an **Open in Browser** button.
-- **Script arguments.** PowerShell `param()` blocks and shell `# Usage:` lines, `getopts` and `case "$1"` become pick lists and text boxes before a run.
+- **Script arguments.** PowerShell `param()` blocks, usage lines (`# Usage:`, `echo "Usage: …"`, `Write-Host "Usage: …"`), `getopts` and `case "$1"` become pick lists and text boxes before a run.
 - **Groups** start several commands in order, each waiting until the previous one has finished or is ready.
 - **Favorites, a status bar item and a quick-pick runner** for the commands you use most.
 - **Out of the way**: output goes to a terminal only when you ask for it or a command fails.
@@ -62,7 +62,13 @@ A script's row shows what it takes (`env (staging, prod) [--dry-run]`), and ▶ 
 
 ![Running deploy.sh: a pick list offers staging and prod, read from the script's usage line](docs/images/args.png)
 
-Task Hub reads PowerShell `param()` blocks (`Mandatory`, defaults, `[ValidateSet()]`, `[switch]`) and, in shell scripts, a `# Usage:` comment, the `getopts` option string, `case "$1"` branches and the `$1`…`$9` the script uses (named from lines like `env=${1:-staging}`). A script with nothing to read gets one optional text box. Values are passed as an argument list, never pasted into a shell string, so spaces and quotes are safe.
+Task Hub reads, in this order:
+
+- PowerShell `param()` blocks (`Mandatory`, defaults, `[ValidateSet()]`, `[switch]`).
+- A usage line, in shell and PowerShell scripts: a `# Usage:` comment, one the script prints (`echo "Usage: ./run.sh …"`, `printf`, `Write-Host 'Usage: .\run.ps1 …'`, a heredoc), the line after a `Usage:` that stands alone, or a comment that starts with the script's own name (`#   ./build.sh <dev|prod> [version]`). In it, `<…>` and `{…}` are required, `[…]` optional, `a|b` a pick list and `<files>...` one or more values. `[--here]` is a switch and `[-n|--dry-run]` one switch with two names. `[--fe=web|mobile]` is a pick list passed as one word (`--fe=web`), and something like `[--emulator[=<avd>]|--device=<serial>]` gets a text box whose words are passed as typed. Options are never required.
+- Otherwise, in shell scripts: the `getopts` option string, `case "$1"` branches and the `$1`…`$9` the script uses (named from lines like `env=${1:-staging}`). A function's own `$1` doesn't count, unless the script hands the function its arguments (`main "$@"`).
+
+A script with nothing to read gets one optional text box. Values are passed as an argument list, never pasted into a shell string, so spaces and quotes are safe.
 
 ## Favorites, the status bar and the quick pick
 

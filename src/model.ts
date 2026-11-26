@@ -43,6 +43,11 @@ export interface ScriptArg {
 	flag?: string;
 	/** Takes several values (just's `+args`), split like a shell would. */
 	variadic?: boolean;
+	/** Passed as one word, `flag=value` (`--fe=web` from a usage line's `[--fe=web|mobile]`). */
+	joined?: boolean;
+	/** The words typed are passed as they are, split like a shell would: a usage line's
+	 * `[--emulator[=<avd>]|--device=<serial>]`, too varied to ask for piece by piece. */
+	raw?: boolean;
 }
 
 /** A second command on the same row, such as a compose service's Stop and Logs. */

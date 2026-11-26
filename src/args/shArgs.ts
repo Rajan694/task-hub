@@ -1,108 +1,27 @@
 import type { ScriptArg } from '../model';
+import { parseUsage } from './usage';
 
 /**
- * The arguments of a shell script. A `# Usage:` comment wins when there is one; otherwise the
- * `getopts` option string gives the options, and the positional `$1`…`$9` the script reads give
- * the rest, with choices from `case "$1" in` branches and names and defaults from lines like
- * `env=${1:-staging}`. Undefined when nothing is found.
+ * The arguments of a shell script. A usage synopsis wins when there is one (`# Usage:`,
+ * `echo "Usage: …"`, see parseUsage); otherwise the `getopts` option string gives the options,
+ * and the positional `$1`…`$9` the script reads outside its functions give the rest, with choices
+ * from `case "$1" in` branches and names and defaults from lines like `env=${1:-staging}`.
+ * Undefined when nothing is found.
  */
-export function parseShArgs(text: string): ScriptArg[] | undefined {
-	return fromUsage(text) ?? fromCode(text);
-}
-
-/** `# Usage: deploy.sh <env> [--dry-run] [-t <tag>] {start|stop}` */
-function fromUsage(text: string): ScriptArg[] | undefined {
-	const line = /^\s*#+\s*usage:\s*(.+)$/im.exec(text)?.[1];
-	if (!line) {
-		return undefined;
-	}
-	const tokens = tokenize(line.trim().replace(/^\$\([^)]*\)\s*/, ''));
-	// The first word is the script's name ("deploy.sh", "$0", "$(basename "$0")").
-	if (tokens.length && !/^[<[{-]/.test(tokens[0])) {
-		tokens.shift();
-	}
-	const args: ScriptArg[] = [];
-	for (let i = 0; i < tokens.length; i++) {
-		const token = tokens[i];
-		const optional = token.startsWith('[');
-		const inner = optional ? token.slice(1, -1).trim() : token;
-		if (/^\.\.\.$/.test(inner)) {
-			continue;
-		}
-		const option = /^(-{1,2}[\w-]+)(?:[\s=]+(.+))?$/.exec(inner);
-		if (option) {
-			let value = option[2];
-			// A bare option followed by its value: "-t <tag>".
-			if (!optional && !value && tokens[i + 1]?.startsWith('<')) {
-				value = tokens[++i];
-			}
-			args.push(
-				value
-					? { name: `${option[1]} ${value}`, kind: 'text', required: !optional, flag: option[1], ...choicesOf(value) }
-					: { name: option[1], kind: 'switch', required: false, flag: option[1] },
-			);
-			continue;
-		}
-		const name = inner.replace(/^[<{]|[>}]$/g, '').replace(/\.\.\.$/, '').trim();
-		if (!name || /^options?$/i.test(name)) {
-			continue;
-		}
-		const variadic = /\.\.\.[>}\]]*$/.test(token) || undefined;
-		// An unnamed choice ("<staging|prod>") is named by its choices.
-		args.push({ name, kind: 'text', required: !optional, variadic, ...choicesOf(token) });
-	}
-	return args.length ? args : undefined;
-}
-
-/** `{start|stop}` or `<staging|prod>` → a choice. */
-function choicesOf(token: string): Partial<ScriptArg> {
-	const inner = token.replace(/^[[<{]+|[\]>}]+$/g, '');
-	const choices = inner.split('|').map((c) => c.trim());
-	if (choices.length > 1 && choices.every((c) => /^[\w.:-]+$/.test(c))) {
-		return { kind: 'choice', choices };
-	}
-	return {};
-}
-
-/** Splits a usage line into words, keeping [ … ], < … > and { … } groups whole. */
-function tokenize(line: string): string[] {
-	const tokens: string[] = [];
-	let i = 0;
-	while (i < line.length) {
-		if (/\s/.test(line[i])) {
-			i++;
-			continue;
-		}
-		const close = { '[': ']', '<': '>', '{': '}' }[line[i]];
-		if (close) {
-			let depth = 0;
-			let j = i;
-			for (; j < line.length; j++) {
-				if (line[j] === line[i]) {
-					depth++;
-				} else if (line[j] === close && --depth === 0) {
-					break;
-				}
-			}
-			tokens.push(line.slice(i, j + 1));
-			i = j + 1;
-		} else {
-			const end = line.slice(i).search(/\s/);
-			const word = end < 0 ? line.slice(i) : line.slice(i, i + end);
-			tokens.push(word);
-			i += word.length;
-		}
-	}
-	return tokens;
+export function parseShArgs(text: string, fileName?: string): ScriptArg[] | undefined {
+	return parseUsage(text, fileName) ?? fromCode(text);
 }
 
 function fromCode(text: string): ScriptArg[] | undefined {
 	// Without comments and single-quoted text, so `awk '{print $2}'` doesn't count as an argument.
-	const code = withoutSingleQuoted(
-		text
-			.split(/\r?\n/)
-			.filter((line) => !/^\s*#/.test(line))
-			.join('\n'),
+	// A function's $1 is its own argument, not the script's.
+	const code = withoutFunctionBodies(
+		withoutSingleQuoted(
+			text
+				.split(/\r?\n/)
+				.filter((line) => !/^\s*#/.test(line))
+				.join('\n'),
+		),
 	);
 	const args: ScriptArg[] = [];
 
@@ -155,6 +74,40 @@ function choicesFromCase(code: string): string[] | undefined {
 		}
 	}
 	return choices.length ? choices : undefined;
+}
+
+/**
+ * Blanks out the bodies of `name() { … }` and `function name { … }`, keeping the line breaks,
+ * except functions the script hands its own arguments to (`main "$@"`). Braces are counted,
+ * which `${var}` and `{ …; }` groups inside keep balanced.
+ */
+function withoutFunctionBodies(code: string): string {
+	const blank = (keep: ReadonlySet<string>) => {
+		const header = /^[ \t]*(?:function[ \t]+([\w.:-]+)(?:[ \t]*\(\))?|([\w.:-]+)[ \t]*\(\))\s*\{/gm;
+		let out = '';
+		let from = 0;
+		for (let match = header.exec(code); match; match = header.exec(code)) {
+			if (match.index < from) {
+				continue; // A function inside one already passed.
+			}
+			let depth = 0;
+			let end = match.index + match[0].length - 1;
+			for (; end < code.length; end++) {
+				if (code[end] === '{') {
+					depth++;
+				} else if (code[end] === '}' && --depth === 0) {
+					break;
+				}
+			}
+			const body = code.slice(match.index, end + 1);
+			out += code.slice(from, match.index) + (keep.has(match[1] ?? match[2]) ? body : body.replace(/[^\n]/g, ' '));
+			from = end + 1;
+		}
+		return out + code.slice(from);
+	};
+	const topLevel = blank(new Set());
+	const forwarded = new Set([...topLevel.matchAll(/(?:^|[\s;&|(])([\w.:-]+)[ \t]+"\$[@*]"/gm)].map((m) => m[1]));
+	return forwarded.size ? blank(forwarded) : topLevel;
 }
 
 /** Empties single-quoted strings (outside double quotes) and drops end-of-line comments. */

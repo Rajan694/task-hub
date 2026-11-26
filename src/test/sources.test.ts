@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import { buildArgv } from '../args/prompt';
 import { parsePs1Params } from '../args/ps1Params';
 import { parseShArgs } from '../args/shArgs';
+import { parseUsage } from '../args/usage';
 import { argsSummary } from '../args/summary';
 import { parseComposeServices } from '../detectors/compose';
 import { gradleRunTasks, parseGradleTasks, parseSettingsIncludes } from '../detectors/gradle';
@@ -17,6 +18,7 @@ import { parseMakeTargets } from '../detectors/make';
 import { parseTaskfile } from '../detectors/taskfile';
 import { parseTasksJson } from '../detectors/vscodeTasks';
 import { mappingEntries } from '../detectors/yaml';
+import type { ScriptArg } from '../model';
 import { SavedStore } from '../saved';
 import { parsePsOutput } from '../services';
 import { splitArgs } from '../shell';
@@ -225,6 +227,60 @@ suite('script arguments', () => {
 		]);
 	});
 
+	test('a printed usage line: --opt=choices, switch aliases, mixed option groups; helper $1 ignored', () => {
+		const text = lines(
+			'#!/bin/bash',
+			'usage() {',
+			'    echo "Usage: ./run.sh [all|be|fe] [-n|--dry-run] [-h|--help] [--fe=web|mobile] [--out=DIR] [--emulator[=<avd>]|--device=<serial>]" >&2',
+			'    exit 1',
+			'}',
+			'start() { local name="$1" dir="$2"; }',
+			'for arg in "$@"; do case "$arg" in --here) HERE=1 ;; esac; done',
+		);
+		assert.deepStrictEqual(parseShArgs(text, 'run.sh'), [
+			{ name: 'all|be|fe', kind: 'choice', choices: ['all', 'be', 'fe'], required: false, variadic: undefined },
+			{ name: '-n|--dry-run', kind: 'switch', required: false, flag: '--dry-run' },
+			{ name: '--fe=web|mobile', kind: 'choice', choices: ['web', 'mobile'], required: false, flag: '--fe', joined: true },
+			{ name: '--out=DIR', kind: 'text', required: false, flag: '--out', joined: true },
+			{ name: '--emulator[=<avd>]|--device=<serial>', kind: 'text', required: false, raw: true },
+		]);
+	});
+
+	test('PowerShell Write-Host usage line when there is no param() block', () => {
+		const text = lines(
+			'function Show-Usage {',
+			"    Write-Host 'Usage: .\\buildFE.ps1 <dev|prod> <platform>... [version] [--set <sha>]'",
+			'}',
+			'foreach ($arg in $args) { }',
+		);
+		assert.strictEqual(parsePs1Params(text), undefined);
+		assert.deepStrictEqual(parseUsage(text, 'buildFE.ps1'), [
+			{ name: 'dev|prod', kind: 'choice', choices: ['dev', 'prod'], required: true, variadic: undefined },
+			{ name: 'platform', kind: 'text', required: true, variadic: true },
+			{ name: 'version', kind: 'text', required: false, variadic: undefined },
+			{ name: '--set <sha>', kind: 'text', required: false, flag: '--set' },
+		]);
+	});
+
+	test('"Usage:" alone with the synopsis on the next line, and a comment starting with the script name', () => {
+		assert.deepStrictEqual(parseUsage(lines('cat <<EOF', 'Usage:', '  $0 <env> [--force]', 'EOF'), 'go.sh'), [
+			{ name: 'env', kind: 'text', required: true, variadic: undefined },
+			{ name: '--force', kind: 'switch', required: false, flag: '--force' },
+		]);
+		const text = lines('# Builds the apps.', '#', '#   ./build.sh prod android   # bumps the version', '#   ./build.sh <dev|prod> [version]', 'exec ./buildFE.sh "$@"');
+		assert.deepStrictEqual(parseShArgs(text, 'build.sh'), [
+			{ name: 'dev|prod', kind: 'choice', choices: ['dev', 'prod'], required: true, variadic: undefined },
+			{ name: 'version', kind: 'text', required: false, variadic: undefined },
+		]);
+		assert.strictEqual(parseUsage(text, 'other.sh'), undefined, "another script's name doesn't count");
+	});
+
+	test('$1 inside a function counts when the script hands it its arguments', () => {
+		assert.deepStrictEqual(parseShArgs(lines('main() {', '  env=${1:-dev}', '}', 'helper() { echo "$2"; }', 'main "$@"')), [
+			{ name: 'env', kind: 'text', choices: undefined, defaultValue: 'dev', required: false },
+		]);
+	});
+
 	test('shell getopts', () => {
 		assert.deepStrictEqual(parseShArgs('while getopts ":e:dv" opt; do :; done'), [
 			{ name: '-e', kind: 'text', required: false, flag: '-e' },
@@ -289,6 +345,24 @@ suite('script arguments', () => {
 			'y z',
 		]);
 		assert.deepStrictEqual(buildArgv(args, { '-e': '', Force: false, one: 'a', two: '', three: '', files: '' }), ['a']);
+	});
+
+	test('--opt=value is one word, raw answers pass as typed', () => {
+		const args: ScriptArg[] = [
+			{ name: 'target', kind: 'text', required: false },
+			{ name: '--fe=web|mobile', kind: 'choice', choices: ['web', 'mobile'], required: false, flag: '--fe', joined: true },
+			{ name: '--emulator[=<avd>]|--device=<serial>', kind: 'text', required: false, raw: true },
+			{ name: '-n|--dry-run', kind: 'switch', required: false, flag: '--dry-run' },
+		];
+		assert.deepStrictEqual(buildArgv(args, { target: 'be', '--fe=web|mobile': 'mobile', '--emulator[=<avd>]|--device=<serial>': '--device=R5 --emulator', '-n|--dry-run': true }), [
+			'be',
+			'--fe=mobile',
+			'--device=R5',
+			'--emulator',
+			'--dry-run',
+		]);
+		assert.deepStrictEqual(buildArgv(args, { target: '', '--fe=web|mobile': '', '--emulator[=<avd>]|--device=<serial>': '', '-n|--dry-run': false }), []);
+		assert.strictEqual(argsSummary(args), '[target] [--fe=web|mobile] [--emulator[=<avd>]|--device=<serial>] [-n|--dry-run]');
 	});
 
 	test('splitArgs', () => {

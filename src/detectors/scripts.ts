@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { parsePs1Params } from '../args/ps1Params';
 import { parseShArgs } from '../args/shArgs';
 import { argsSummary } from '../args/summary';
+import { parseUsage } from '../args/usage';
 import type { CommandDetector, CommandGroup, DetectContext, HubCommand, ScriptArg } from '../model';
 import { bashPath, powershellPath } from '../platform';
 import { quoteArg } from '../shell';
@@ -103,17 +104,18 @@ export const scriptsDetector: CommandDetector = {
 				groups.set(folderId, group);
 			}
 
+			const fileName = path.basename(uri.fsPath);
 			let args: ScriptArg[] | undefined;
 			if (kind !== 'cmd') {
 				try {
 					const text = await readStart(uri.fsPath);
-					args = kind === 'powershell' ? parsePs1Params(text) : parseShArgs(text);
+					// A param() block wins; scripts that read $args usually print a usage line instead.
+					args = kind === 'powershell' ? (parsePs1Params(text) ?? parseUsage(text, fileName)) : parseShArgs(text, fileName);
 				} catch (error) {
 					context.log.warn(`Couldn't read ${uri.fsPath}: ${error instanceof Error ? error.message : String(error)}`);
 				}
 			}
 
-			const fileName = path.basename(uri.fsPath);
 			const cwd = settings.scriptsRunFrom === 'workspaceRoot' ? context.folder.uri.fsPath : path.dirname(uri.fsPath);
 			// Forward slashes for bash, which Git Bash on Windows needs.
 			const relativePath = path.relative(cwd, uri.fsPath) || fileName;
