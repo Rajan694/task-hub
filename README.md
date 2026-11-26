@@ -135,19 +135,13 @@ Set `taskHub.storage` to `private` to keep saved commands, groups and favorites 
 
 ## Installation
 
-Install **Task Hub** from the VS Code Marketplace or Open VSX, or from a `.vsix` attached to a [GitHub release](https://github.com/Rajan694/task-hub/releases) (see [INSTALL_FROM_VSIX.md](INSTALL_FROM_VSIX.md)).
+Install **Task Hub** from the VS Code Marketplace or Open VSX.
 
-## Development
-
-Requires Node.js 22 or later.
+To install a specific version, download its `.vsix` file from the [GitHub releases](https://github.com/Rajan694/task-hub/releases), then in VS Code open the Extensions view, click `...` and choose **Install from VSIX...**, or run:
 
 ```bash
-npm install
-npm run compile     # type-check, lint, bundle to dist/
-npm test            # extension tests in a downloaded VS Code
+code --install-extension task-hub-X.Y.Z.vsix
 ```
-
-Press `F5` in VS Code to open a window with the extension loaded. The design is in [docs/DESIGN.md](docs/DESIGN.md); packaging and publishing are in [RELEASING.md](RELEASING.md).
 
 ## License
 

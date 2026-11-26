@@ -15,11 +15,7 @@ node_modules/**
 .env.*
 .yarnrc
 esbuild.js
-RELEASING.md
-INSTALL_FROM_VSIX.md
-.nvmrc
 vsc-extension-quickstart.md
-assets/icon.svg
 **/tsconfig.json
 **/eslint.config.mjs
 **/*.map
