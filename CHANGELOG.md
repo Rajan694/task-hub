@@ -7,6 +7,8 @@ Write new entries under **[Unreleased]**. The publish script moves them under th
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-26
+
 The first full release: every command source from the design, with groups, favorites and a quick-pick runner.
 
 ### Command sources
