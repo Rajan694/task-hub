@@ -14,7 +14,13 @@ const MAX_READ = 64 * 1024;
 
 type ScriptKind = 'bash' | 'powershell' | 'cmd';
 
+/** The Maven and Gradle wrappers, which the Maven and Gradle sources already run. */
+const BUILD_WRAPPERS = new Set(['mvnw.cmd', 'gradlew.bat']);
+
 function kindOf(file: string): ScriptKind | undefined {
+	if (BUILD_WRAPPERS.has(path.basename(file).toLowerCase())) {
+		return undefined;
+	}
 	switch (path.extname(file).toLowerCase()) {
 		case '.sh':
 		case '.bash':
@@ -64,7 +70,7 @@ async function readStart(file: string): Promise<string> {
 /**
  * Shell, PowerShell and batch scripts, one heading per folder. Each runs with an argument
  * list (`bash deploy.sh staging`), never through a shell string, so values are passed as typed.
- * `.bat` and `.cmd` files are listed on Windows only.
+ * `.bat` and `.cmd` files are listed on Windows only, without the `mvnw.cmd` and `gradlew.bat` wrappers.
  */
 export const scriptsDetector: CommandDetector = {
 	source: 'script',
